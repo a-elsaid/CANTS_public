@@ -1,0 +1,1 @@
+pytest --sw ./test_ant_cats.py -k test_move test.sh

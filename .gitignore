@@ -1,0 +1,7 @@
+*.log
+*.nyp
+*.nn
+.pylintrc
+logs
+__pycache__
+colony1_space_sample*
