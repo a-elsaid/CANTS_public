@@ -95,13 +95,13 @@ for tim in range(intervals, args.living_time + 1, intervals):
         thread.join()
 
     for coln in colonies:
+        avg_col_fit = sum(np.array(coln.best_rnns)[:, 0]) / len(np.array(coln.best_rnns)[:, 0])
         if (
-            sum(np.array(coln.best_rnns)[:, 0]) / len(np.array(coln.best_rnns)[:, 0])
-            < fitness_global
+            avg_col_fit < fitness_global
             or fitness_global == -1
         ):
             best_position_global = coln.pso_best_position
-            fitness_global = np.average(np.array(coln.best_rnns)[:, 0])
+            fitness_global = avg_col_fit
     for coln in colonies:
         coln.update_velocity(best_position_global)
         coln.update_position()
