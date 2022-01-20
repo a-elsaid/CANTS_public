@@ -96,7 +96,8 @@ for tim in range(intervals, args.living_time + 1, intervals):
 
     for coln in colonies:
         if (
-            np.average(np.array(coln.best_rnns)[:, 0]) < fitness_global
+            sum(np.array(coln.best_rnns)[:, 0]) / len(np.array(coln.best_rnns)[:, 0])
+            < fitness_global
             or fitness_global == -1
         ):
             best_position_global = coln.pso_best_position
@@ -123,6 +124,7 @@ for coln in colonies[1:]:
         best_rnn_colony = coln
 
 
+logger.info(f"** Evaluating Best RNN in Best Colony({best_rnn_colony.id}) **")
 best_rnn_colony.use_bp = True
 best_rnn_colony.evaluate_rnn(best_rnn_colony.best_rnns[0][1])
 

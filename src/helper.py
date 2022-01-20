@@ -61,7 +61,7 @@ ACTIVATIONS = {
 class Args_Parser:
     def __init__(self, args):
         def add_params(param, count):
-            while count < len(args) and "--" not in args[count]:
+            while count < len(args) and "-" not in args[count]:
                 param.append(args[count])
                 count += 1
             return count - 1
@@ -90,9 +90,72 @@ class Args_Parser:
         self.communication_intervals = 50
         self.living_time = 1000
         self.dbscan_min_sample = 2
-        count = 0
+        count = 1
         while count < len(args):
-            if args[count] in ["--data_files", "-f"]:
+            if args[count] in ["--help", "-h"]:
+                print(
+                    "To run the program: python <src/colony.py> or <src/colonies.py> and then the following parameters:"
+                )
+                print("Data Directory (Required):                     --data_dir or -d")
+                print("Log Directory (Defualt=./):                    --log_dir or -x")
+                print(
+                    "Data Files (Required):                         --data_files or -f"
+                )
+                print(
+                    "Input Parameters (required):                   --input_names or -inms"
+                )
+                print(
+                    "Output Parameters (required):                  --output_names or -onms"
+                )
+                print(
+                    "File Log Level (Defualt=INFO):                 --file_log_level or -fl"
+                )
+                print(
+                    "Terminal Log Level (Defualt=INFO):             --term_log_level or -tl"
+                )
+                print(
+                    "Colony Log Level (Defualt=INFO):               --col_log_level or -cl"
+                )
+                print("Output Directory (Defualt=./):                 --out_dir or -o")
+                print("Use Backpropagation:                           --use_bp or -b")
+                print(
+                    "Backpropagation Epochs (Defualt=0):            --bp_epochs or -e"
+                )
+                print("Number of Ants (Defualt=10):                   --num_ants or -a")
+                print(
+                    "Max Pheromone (Defualt=10.0):                  --max_pheromone or -m"
+                )
+                print(
+                    "Min Pheromone (Defualt=0.5):                   --min_pheromone or -n"
+                )
+                print(
+                    "Ant Population (Defualt=10):                   --ant_population or -s"
+                )
+                print(
+                    "Colony Population (Defualt=10):                --colony_population or -c"
+                )
+                print("Time Lags (Defualt=5):                          --lags or -t")
+                print(
+                    "Defualt Pheromone (Defualt=1.0):               --default_pheromone or -dph"
+                )
+                print(
+                    "Evaporation Rate (Defualt=0.9):                --evaporation_rate or -evp"
+                )
+                print(
+                    "Max DBSCAN Distance (Defualt=0.1):             --max_dbscan_dist or -dbdst"
+                )
+                print(
+                    "Max DBSCAN Samples (Defualt=2):                --max_dbscan_smpl or -dbsmpl"
+                )
+                print("Number of Colonies (Defualt=20):               --num_col or -nc")
+                print(
+                    "Colonies Communication Intervals (Defualt=50): --comm_interval or -comi"
+                )
+                print(
+                    "Colinies Living Iterations (Defualt=1000):     --living_time or -livt"
+                )
+                sys.exit()
+            elif args[count] in ["--data_files", "-f"]:
                 count += 1
                 count = add_params(self.data_files, count)
                 self.data_files = " ".join(self.data_files)
@@ -106,10 +169,10 @@ class Args_Parser:
                 self.output_names = []
                 count = add_params(self.output_names, count)
                 self.output_names = " ".join(self.output_names)
-            elif args[count] in ["--file_log_level", "-l"]:
+            elif args[count] in ["--file_log_level", "-fl"]:
                 count += 1
                 self.file_log_level = args[count].upper()
-            elif args[count] in ["--term_log_level", "-l"]:
+            elif args[count] in ["--term_log_level", "-tl"]:
                 count += 1
                 self.term_log_level = args[count].upper()
             elif args[count] in ["--col_log_level", "-cl"]:
@@ -174,6 +237,9 @@ class Args_Parser:
             elif args[count] in ["--living_time", "-livt"]:
                 count += 1
                 self.living_time = int(args[count])
+            else:
+                logger.error(f"Unknown Commandline Arguement: {args[count]}")
+                sys.exit()
             count += 1
         if self.data_files == "":
             logger.error("No Data Files Provided")
