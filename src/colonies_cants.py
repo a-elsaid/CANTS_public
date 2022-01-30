@@ -10,9 +10,10 @@ from loguru import logger
 from colony_cants import Colony
 from timeseries import Timeseries
 from helper import Args_Parser
-
+from search_space_cants import RNNSearchSpaceCANTS
 
 args = Args_Parser(sys.argv)
+
 NUM_COLONIES = 20
 LIVING_TIME = 1000
 
@@ -20,31 +21,19 @@ fitness_global = -1
 
 logger.remove()
 logger.add(sys.stderr, level=args.term_log_level)
-logger.add(f"{args.log_dir}/cants.log", level=args.file_log_level)
+logger.add(f"{args.log_dir}/{args.log_file_name}_cants.log", level=args.file_log_level)
 
 colonies = []
 threads = []
 for c in range(args.num_colonies):
-    data_files = "burner_0.csv"
-    data_dir = "2018_coal"
-    input_params = "Conditioner_Inlet_Temp,Conditioner_Outlet_Temp".replace(",", " ")
-    output_params = "Main_Flm_Int"
-
-    data_files = args.data_files
-    data_dir = args.data_dir
-    input_params = args.input_names
-    output_params = args.output_names
 
     data = Timeseries(
-        data_files=data_files,
-        input_params=input_params,
-        output_params=output_params,
-        data_dir=data_dir,
+        data_files=args.data_files,
+        input_params=args.input_names,
+        output_params=args.output_names,
+        data_dir=args.data_dir,
     )
-    data.train_input = data.train_input[:20]
-    data.test_input = data.test_input[:20]
-    data.train_output = data.train_output[:20]
-    data.test_output = data.test_output[:20]
+
     num_ants = np.random.randint(low=5, high=50)
     population_size = np.random.randint(low=10, high=100)
     evaporation_rate = np.random.uniform(low=0.7, high=0.9)
@@ -63,6 +52,11 @@ for c in range(args.num_colonies):
         log_dir=args.log_dir,
         logger=logger,
         col_log_level=args.col_log_level,
+        log_file_name=args.log_file_name,
+        num_threads=args.num_threads,
+        ants_mortality=None,
+        use_cants=args.use_cants,
+
     )
     colonies.append(colony)
 
@@ -95,11 +89,10 @@ for tim in range(intervals, args.living_time + 1, intervals):
         thread.join()
 
     for coln in colonies:
-        avg_col_fit = sum(np.array(coln.best_rnns)[:, 0]) / len(np.array(coln.best_rnns)[:, 0])
-        if (
-            avg_col_fit < fitness_global
-            or fitness_global == -1
-        ):
+        avg_col_fit = sum(np.array(coln.best_rnns)[:, 0]) / len(
+            np.array(coln.best_rnns)[:, 0]
+        )
+        if avg_col_fit < fitness_global or fitness_global == -1:
             best_position_global = coln.pso_best_position
             fitness_global = avg_col_fit
     for coln in colonies:
@@ -107,15 +100,16 @@ for tim in range(intervals, args.living_time + 1, intervals):
         coln.update_position()
     logger.info(f"Finished {tim}/{args.living_time}")
 
-    np.save(
-        f"colony1_space_sample_{tim}",
-        np.array(
-            [
-                [p.pos_x, p.pos_y, p.pos_l, p.pos_w]
-                for p in colonies[0].space.all_points.values()
-            ]
-        ),
-    )
+    if isinstance(colonies[0].space, RNNSearchSpaceCANTS):
+        np.save(
+            f"colony1_space_sample_{tim}",
+            np.array(
+                [
+                    [p.pos_x, p.pos_y, p.pos_l, p.pos_w]
+                    for p in colonies[0].space.all_points.values()
+                ]
+            ),
+        )
 
 
 best_rnn_colony = colonies[0]

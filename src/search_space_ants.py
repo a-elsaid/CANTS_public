@@ -1,6 +1,7 @@
 import sys
 from typing import List
 import numpy as np
+import torch
 
 DEFAULT_PHEROMONE_VALUE = 1.0
 EVAPORATION_RATE = 0.9
@@ -10,20 +11,22 @@ NODE_TYPE = {"INPUT": 0, "HIDDEN": 1, "OUTPUT": 2}
 DEFAULT_LAG = 10
 
 
-class RNNSearchSpaceCANTS:
+class RNNSearchSpaceANTS:
     def __init__(
         self,
         logger,
         inputs_names: List[str],
         outs_names: List[str],
+        num_hid_nodes: int,
+        num_hid_layers: int,
         lags: int = DEFAULT_LAG,
         max_pheromone: float = MAX_PHEROMONE,
         min_pheromone: float = MIN_PHEROMONE,
         evaporation_rate: float = EVAPORATION_RATE,
     ) -> None:
         self.logger = logger
-        self.width = 1.0
-        self.length = 1.0
+        self.num_hid_nodes = num_hid_nodes
+        self.num_hid_layers = num_hid_layers
         self.time_lags = lags
         self.all_points = {}
         self.evaporation_rate = evaporation_rate
@@ -40,58 +43,109 @@ class RNNSearchSpaceCANTS:
         )
         self.output_space = self.Outputs_Space(outs_names)
 
+        """Creating Hidden Points"""
+        for l in range(self.time_lags):
+            for h in range(num_hid_layers):
+                for n in range(num_hid_nodes):
+                    pnt = self.Point(lag=l, hid=h, point_type=NODE_TYPE["HIDDEN"])
+                    self.all_points[pnt.id] = pnt
+
+        """Linking Hidden Points with other Hidden Points and Output Points"""
+        for in_pnt in self.all_points.values():
+            for out_pnt in self.all_points.values():
+                if (in_pnt.pos_l == out_pnt.pos_l and in_pnt.hid < out_pnt.hid) or (
+                    in_pnt.pos_l < out_pnt.pos_l
+                ):
+                    link = self.Link(in_pnt, out_pnt)
+                    in_pnt.fan_out[out_pnt] = link
+                    out_pnt.fan_in.append(link)
+            for out_pnt in self.output_space.points:
+                link = self.Link(in_node=pnt, out_node=out_pnt)
+                in_pnt.fan_out[out_pnt] = link
+                out_pnt.fan_in.append(link)
+
+        """Linking Input Points with Hidden Points and Output Points"""
+        for input_level in self.inputs_space.inputs_spaces.values():
+            for pnt in input_level.points:
+                for hid_pnt in self.all_points.values():
+                    if pnt.pos_l <= hid_pnt.pos_l:
+                        link = self.Link(in_node=pnt, out_node=hid_pnt)
+                        pnt.fan_out[hid_pnt] = link
+                        hid_pnt.fan_in.append(link)
+                for out_pnt in self.output_space.points:
+                    link = self.Link(in_node=pnt, out_node=out_pnt)
+                    pnt.fan_out[out_pnt] = link
+                    out_pnt.fan_in.append(link)
+
     def evaporate_pheromone(
         self,
     ) -> None:
-        self.inputs_space.evaporate_pheromone()
-        self.output_space.evaporate_pheromone()
-        points_to_be_removed = []
-        for point in self.all_points.values():
-            point.pheromone *= self.evaporation_rate
-            if point.pheromone < 0.05:
-                points_to_be_removed.append(point)
-        for pnt in points_to_be_removed:
-            self.all_points.pop(pnt.id)
+        self.inputs_space.evaporate_pheromone
+        for pnt in self.all_points.values():
+            for link in pnt.fan_out:
+                link.pheromone = max(
+                    link.pheromone * self.evaporation_rate, self.min_pheromone
+                )
 
     class Point:
         counter = 0
 
         def __init__(
             self,
-            x: float,
-            y: float,
             lag: int,
-            w: float,
+            hid: int = None,
             point_type: int = None,
             name: str = None,
             inout_num: int = None,
         ) -> None:
+            self.bias = torch.tensor(
+                np.random.random(), dtype=torch.float32, requires_grad=True
+            )
+            self.fan_in = []
+            self.fan_out = {}
             self.id = self.counter
-            self.pos_x = x
-            self.pos_y = y
             self.pos_l = lag  # time lag
-            self.pos_w = w  # weight
-            self.pheromone = DEFAULT_PHEROMONE_VALUE
-            self.type = NODE_TYPE["HIDDEN"]
-            self.name = name
+            self.hid = hid
             self.inout_num = inout_num
+            self.type = NODE_TYPE["HIDDEN"]
+            self.pheromone = DEFAULT_PHEROMONE_VALUE
+            self.name = name
             if self.name is not None:
                 self.type = point_type
-            RNNSearchSpaceCANTS.Point.counter += 1
+            RNNSearchSpaceANTS.Point.counter += 1
 
-        def print_point(
+    class Link:
+        def __init__(self, in_node, out_node, weight: float = None) -> None:
+            self.in_node = in_node
+            self.out_node = out_node
+            self.pheromone = DEFAULT_PHEROMONE_VALUE
+            self.weight = weight
+            if not self.weight:
+                self.weight = np.random.random()
+
+        def evaporate_pheromone(
             self,
         ) -> None:
-            print(
-                f"Pos X: {self.pos_x}, Pos Y: {self.pos_y}, Pos L: {self.pos_l}, Weight: {self.pos_w}, Type: {self.type}, Name: {self.name}, In_No: {self.inout_num}"
-            )
+            self.pheromone = max(self.pheromone * EVAPORATION_RATE, MIN_PHEROMONE)
+
+        def increase_pheromone(self, pheromone_step) -> None:
+            self.pheromone = min(self.pheromone + pheromone_step, MAX_PHEROMONE)
 
     class Single_Input_Space:
         def __init__(self, in_num: int, lags: int, name: str) -> None:
             self.time_lags = lags
             self.name: str = name
             self.in_num: int = in_num
-            self.points: List[RNNSearchSpaceCANTS.Point] = []
+            self.points: List[RNNSearchSpaceANTS.Point] = []
+            for l in range(lags):
+                self.points.append(
+                    RNNSearchSpaceANTS.Point(
+                        lag=l,
+                        point_type=NODE_TYPE["INPUT"],
+                        name=name,
+                        inout_num=in_num,
+                    )
+                )
             self.input_pheromone = DEFAULT_PHEROMONE_VALUE
 
         def get_point(
@@ -118,7 +172,7 @@ class RNNSearchSpaceCANTS:
             self.min_pheromone = min_pheromone
             self.evaporation_rate = evaporation_rate
             for i, name in enumerate(inputs_names):
-                self.inputs_spaces[name] = RNNSearchSpaceCANTS.Single_Input_Space(
+                self.inputs_spaces[name] = RNNSearchSpaceANTS.Single_Input_Space(
                     in_num=i, lags=lags, name=self.inputs_names[i]
                 )
             if len(self.inputs_spaces) != len(inputs_names):
@@ -142,21 +196,14 @@ class RNNSearchSpaceCANTS:
                     0
                 ]
                 input_space = self.inputs_spaces[input_name]
+
             if (
                 np.random.random() < ant_exploration_rate
                 or len(input_space.points) == 0
             ):
-                new_point = RNNSearchSpaceCANTS.Point(
-                    0.0,
-                    0.0,
-                    np.random.randint(0, self.lags),
-                    np.random.random(),
-                    NODE_TYPE["INPUT"],
-                    input_space.name,
-                    inout_num=input_space.in_num,
-                )
-                input_space.points.append(new_point)
-                return new_point
+                return input_space.points[
+                    np.random.randint(low=0, high=len(input_space.points))
+                ]
             return input_space.get_point()
 
         def increase_pheromone(self, point, pheromone_step: float) -> None:
@@ -187,24 +234,11 @@ class RNNSearchSpaceCANTS:
     class Outputs_Space:
         def __init__(self, outputs_names):
             self.points = [
-                RNNSearchSpaceCANTS.Point(
-                    i / 10.0, 1.0, 0, np.random.random(), NODE_TYPE["OUTPUT"], name, i
+                RNNSearchSpaceANTS.Point(
+                    lag=0,
+                    hid=(i + 1) / len(outputs_names),
+                    point_type=NODE_TYPE["OUTPUT"],
+                    name=name,
                 )
                 for i, name in enumerate(outputs_names)
             ]
-
-        def get_point(
-            self,
-        ) -> None:
-            pheromones = [pnt.pheromone for pnt in self.points]
-            norm_pheromones = pheromones / np.sum(pheromones)
-            return np.random.choice(self.points, 1, p=norm_pheromones)[0]
-
-        def evaporate_pheromone(
-            self,
-        ) -> None:
-            for point in self.points:
-                point.pheromone = max(point.pheromone * EVAPORATION_RATE, MIN_PHEROMONE)
-
-        def increase_pheromone(self, pnt, pheromone_step) -> None:
-            pnt.pheromone = min(pnt.pheromone + pheromone_step, MAX_PHEROMONE)

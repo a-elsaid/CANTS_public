@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from loguru import logger
 from helper import ACTIVATIONS, LOSS
-from search_space_cants import Point
 
 
 class Node:
@@ -21,7 +20,7 @@ class Node:
 
     def __init__(
         self,
-        point: Point,
+        point,
         lag: int,
         activation_type: str = "sigmoid",
     ) -> None:
@@ -109,10 +108,11 @@ class Edge:
         self.id = self.counter
         self.in_node = in_node
         self.out_node = out_node
-        self.weight = weight
-        if not self.weight:
-            self.weight = np.random.random()
-        self.weight = torch.tensor(self.weight, dtype=torch.float32, requires_grad=True)
+        if not weight:
+            weight = np.random.random()
+        self.weight = torch.tensor(
+            float(weight), dtype=torch.float32, requires_grad=True
+        )
 
 
 class RNN:
@@ -122,10 +122,10 @@ class RNN:
 
     def __init__(
         self,
-        paths: List[List[Point]],
-        centeroids_clusters: Dict[int, np.ndarray],
+        paths,
         lags: int,
         loss_fun: str = "mse",
+        centeroids_clusters: Dict[int, np.ndarray] = None,
     ):
         self.fitness: float = None
         self.err: torch.float32 = torch.tensor(0.0, dtype=torch.float32)
@@ -154,7 +154,12 @@ class RNN:
                 next_node = self.nodes[next_p.id]
                 if curr_node.point.id in next_node.fan_out:
                     continue
-                curr_node.add_fan_out_node(curr_node, next_node, curr_p.pos_w)
+                if self.centeroids_clusters:
+                    curr_node.add_fan_out_node(curr_node, next_node, curr_p.pos_w)
+                else:
+                    curr_node.add_fan_out_node(
+                        curr_node, next_node, curr_p.fan_out[next_p].weight
+                    )
                 next_node.add_fan_in_node(curr_node)
 
         for node in self.nodes.values():
@@ -166,6 +171,53 @@ class RNN:
                 logger.debug(f"\t Out Node({e.out_node.id})")
             for n in node.fan_in:
                 logger.debug(f"\t In Node({n.id})")
+
+    def build_fully_connected_rnn(
+        self, input_names, output_names, lags, hid_layers, hid_nodes
+    ) -> None:
+        from search_space_ants import RNNSearchSpaceANTS
+
+        self.lags = lags
+        Point = RNNSearchSpaceANTS.Point
+        for i, name in enumerate(input_names):
+            for l in range(lags):
+                node = Node(Point(None, None, 0, name, i), l)
+                self.nodes[node.id] = node
+                self.input_nodes.append(node)
+
+        for name in output_names:
+            node = Node(Point(None, None, 2, name, i), lags - 1)
+            self.nodes[node.id] = node
+            self.output_nodes.append(node)
+
+        hid_layers = 0
+        next_layer = self.output_nodes
+        for _ in range(hid_layers):
+            curr_layer = []
+            for _ in range(hid_nodes):
+                node = Node(Point(None, None, 0, None, None), l)
+                self.nodes[node.id] = node
+                curr_layer.append(node)
+            for in_node in curr_layer:
+                for out_node in next_layer:
+                    in_node.add_fan_out_node(in_node, out_node, np.random.random())
+                    out_node.add_fan_in_node(in_node)
+            next_layer = curr_layer
+
+        for in_node in self.input_nodes:
+            for out_node in next_layer:
+                in_node.add_fan_out_node(in_node, out_node, np.random.random())
+                out_node.add_fan_in_node(in_node)
+
+        for node in self.nodes.values():
+            node.waiting_signals = node.signals_to_receive
+            logger.debug(
+                f"Node({node.id}): Type: {node.type}  Name: {node.point.name} Point: {node.point.id}"
+            )
+            logger.debug(
+                f"\tOut Nodes: {[edge.out_node.id for edge in node.fan_out.values()]}"
+            )
+            logger.debug(f"\tIn Nodes: {[node.id for node in node.fan_in]}")
 
     def feedforward(
         self,

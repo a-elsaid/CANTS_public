@@ -7,7 +7,7 @@ from typing import List
 from threading import Lock
 import numpy as np
 
-from search_space_cants import Point, RNNSearchSpace
+from search_space_cants import RNNSearchSpaceCANTS
 
 
 space_lock = Lock()
@@ -37,7 +37,7 @@ class Ant:
         self.current_w: float = 0.0
         self.current_l: int = 0
         self.exploration_rate = explore_rate
-        self.path: List[Point] = []
+        self.path: List[RNNSearchSpaceCANTS.Point] = []
         self.mutation_sigma = 0.15
         self.region_move1 = 0.0
         self.region_move2 = 0.0
@@ -120,7 +120,9 @@ class Ant:
                 self.best_behaviors[indecies[0]], self.best_behaviors[indecies[1]]
             )
 
-    def center_of_mass(self, proximity_points: List[Point]) -> Point:
+    def center_of_mass(
+        self, proximity_points: List[RNNSearchSpaceCANTS.Point]
+    ) -> RNNSearchSpaceCANTS.Point:
         """
         find the center of mass of points based on pheromone value
         """
@@ -143,7 +145,7 @@ class Ant:
             np.sum([pnt.pos_w * pnt.pheromone for pnt in proximity_points])
             / pheromone_mass
         )
-        point = Point(
+        point = RNNSearchSpaceCANTS.Point(
             pheromone_mass_center_x,
             pheromone_mass_center_y,
             pheromone_mass_center_l,
@@ -152,8 +154,8 @@ class Ant:
         return point
 
     def get_proximity_points(
-        self, all_points: List[Point], same_level: bool
-    ) -> List[Point]:
+        self, all_points: List[RNNSearchSpaceCANTS.Point], same_level: bool
+    ) -> List[RNNSearchSpaceCANTS.Point]:
         def decide_same_level(pnt_level):
             if same_level:
                 return pnt_level <= self.current_l
@@ -180,7 +182,7 @@ class Ant:
         ]
         return proximity_points
 
-    def pick_point(self, space: RNNSearchSpace) -> Point:
+    def pick_point(self, space: RNNSearchSpaceCANTS) -> RNNSearchSpaceCANTS.Point:
         """
         Pick the next point in the path
         param: List current_level_points: all points in the current level of ant
@@ -208,7 +210,7 @@ class Ant:
                 break
         return point
 
-    def create_point(self, space: RNNSearchSpace) -> Point:
+    def create_point(self, space: RNNSearchSpaceCANTS) -> RNNSearchSpaceCANTS.Point:
         """
         Create a new point to be added to the search space
         """
@@ -231,12 +233,12 @@ class Ant:
                 1.0,
             ),
         )
-        new_point = Point(new_x, new_y, new_l, new_w)
+        new_point = RNNSearchSpaceCANTS.Point(new_x, new_y, new_l, new_w)
         # with space_lock:
         space.all_points[new_point.id] = new_point
         return new_point
 
-    def move(self, space: RNNSearchSpace) -> None:
+    def move(self, space: RNNSearchSpaceCANTS) -> None:
         """
         Move from one position to another
         :param Dict space: all points in the search space
@@ -265,11 +267,11 @@ class Ant:
         self.current_w = point.pos_w
         self.current_l = point.pos_l
 
-    def forage(self, space: RNNSearchSpace) -> None:
+    def forage(self, space: RNNSearchSpaceCANTS) -> None:
         """
         keep moving in the search space till reach output nodes
         """
-        self.path.append(space.input_space.get_input(self.exploration_rate))
+        self.path.append(space.inputs_space.get_input(self.exploration_rate))
         while self.path[-1].pos_y < 1.0:
             self.move(space)
         self.path.pop(-1)

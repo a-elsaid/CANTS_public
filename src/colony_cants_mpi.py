@@ -12,14 +12,15 @@ also use as a PSO particle to evolve coexisting colonies
 import sys
 from typing import List
 import warnings
-import threading as th
 import numpy as np
 from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+from mpi4py import MPI
 from loguru import logger
+from tqdm import tqdm
 import torch
-from search_space_cants import RNNSearchSpaceCANTS
-from search_space_ants import RNNSearchSpaceANTS
+
+from search_space_cants import RNNSearchSpaceCANTS, MAX_PHEROMONE
+from search_space_ants import RNNSearchSpaceANTS, MAX_PHEROMONE
 from ant_cants import Ant
 from rnn import RNN
 from timeseries import Timeseries
@@ -40,32 +41,32 @@ class Colony:
         self,
         data: Timeseries,
         logger,
-        use_cants: bool,
-        use_bp: bool,
-        num_epochs: int,
-        num_ants: int,
-        ants_mortality: int,
-        population_size: int,
-        max_pheromone: float,
-        min_pheromone: float,
-        default_pheromone: float,
-        space_lags: int,
-        dbscan_dist: float,
-        evaporation_rate: float,
-        log_dir: str,
-        num_threads: int,
+        use_cants: bool = False,
+        use_bp: bool = False,
+        num_epochs: int = 100,
+        num_ants: int = 100,
+        ants_mortality: int = 0.5,
+        population_size: int = 20,
         search_space=None,
+        max_pheromone: float = 10.0,
+        min_pheromone: float = 0.5,
+        default_pheromone: float = 1.0,
+        space_lags: int = 10,
+        dbscan_dist: float = 0.5,
+        evaporation_rate: float = 0.9,
+        log_dir: str = ".",
         col_log_level: str = "INFO",
-        log_file_name: str = "",
+        mpi_comm=None,
     ) -> None:
-        self.num_threads = num_threads
+        self.mpi_comm = mpi_comm
+        self.mpi_size = self.mpi_comm.Get_size()
+        self.rank = self.mpi_comm.Get_rank()
         self.logger = logger
-        self.log_file_name = log_file_name
         self.col_log_level = col_log_level
         self.id = self.counter
         self.logger = logger.bind(col_id=self.id)
         self.logger.add(
-            f"{log_dir}/{self.log_file_name}_colony_{self.id}.log",
+            f"{log_dir}/colony_{self.id}.log",
             filter=lambda record: record["extra"].get("col_id") == self.id,
             level=self.col_log_level,
         )
@@ -76,9 +77,6 @@ class Colony:
         self.use_cants = use_cants
         if not self.use_cants:
             self.use_bp = True
-            if self.num_epochs == 0:
-                self.logger.error("Error: Starting ANTS with 0 Number of Epochs")
-                sys.exit()
         self.num_ants = num_ants
         self.best_population_size = population_size
         self.mortality_rate = ants_mortality
@@ -164,6 +162,33 @@ class Colony:
         """
         Letting ants forage to create paths to create RNN
         """
+
+        def thread_work(space, ant, logger):
+            """
+            to be used by threads doing ant work
+            """
+            ant.forage(space)
+
+        """
+        threads = []
+        for _, ant in enumerate(self.foragers):
+            ant.reset()
+            thread = th.Thread(
+                target=thread_work,
+                args=(
+                    self.space,
+                    ant,
+                    logger,
+                ),
+            )
+            threads.append(thread)
+            logger.info(f"Ant {ant.id} starting a forage")
+            thread.start()
+            logger.info(f"Ant {ant.id} Finished forage")
+        for i, _ in enumerate(self.foragers):
+            threads[i].join()
+        logger.info("All Ants Finished Foraging")
+        """
         for _, ant in enumerate(self.foragers):
             ant.reset()
             ant.forage(self.space)
@@ -221,7 +246,7 @@ class Colony:
                     )
                     continue
                 point.pheromone = min(
-                    point.pheromone + pheromone_increment, self.max_pheromone
+                    point.pheromone + pheromone_increment, MAX_PHEROMONE
                 )
 
                 # calculate distance between the centeroid and cluster points
@@ -233,12 +258,12 @@ class Colony:
                 pheromone_step = pheromone_increment / len(cluster_distances)
                 for i, pnt in enumerate(rnn.centeroids_clusters[point.id]):
                     pnt.pheromone += pheromone_step * (i + 1) * (1 + pnt.pos_l * 0.1)
-                    pnt.pheromone = min(pnt.pheromone, self.max_pheromone)
+                    pnt.pheromone = min(pnt.pheromone, MAX_PHEROMONE)
             else:
                 for edge in node.fan_out.values():
                     pnt_link = node.point.fan_out[edge.out_node.point]
                     pnt_link.pheromone = min(
-                        pnt_link.pheromone + pheromone_increment, self.max_pheromone
+                        pnt_link.pheromone + pheromone_increment, MAX_PHEROMONE
                     )
 
     def update_pheromone_noreg(
@@ -418,9 +443,6 @@ class Colony:
         """
         self.logger.info(f"COLONY({self.id}):: Staring RNN Colony Evaluating")
         if self.use_bp:
-            self.logger.info(
-                f"\tCOLONY({self.id}):: Using BP, (number of Epochs({self.num_epochs})"
-            )
             for i in tqdm(range(self.num_epochs)):
                 rnn.do_epoch(self.data.train_input, self.data.train_output)
                 rnn.feedbackward()
@@ -438,71 +460,92 @@ class Colony:
         self.logger.info(f"COLONY({self.id}):: Finished RNN Colony Evaluation")
         return rnn
 
-    def thread_controller(self, total_marchs, num_threads: int):
-        def thread_worker(rnn) -> None:
-            """
-            training/testing RNN
-            """
-            self.evaluate_rnn(rnn)
-            return rnn
-
-        def prepare_rnn():
+    def main_process(
+        self,
+        num_marchs,
+    ) -> RNN:
+        """
+        for BP training RNNs asychronously: sends jobs to training workers
+        """
+        status = MPI.Status()
+        for march_num in range(1, self.mpi_size):
             if self.use_cants:
                 rnn = self.create_nn_cants()
             else:
                 rnn = self.create_nn_ants()
-            return rnn
-
-        def process_rnn(rnn):
+            self.logger.debug(
+                f"COLONY({self.id}): Main Process sending Task to Worker({march_num})"
+            )
+            self.mpi_comm.send(rnn, dest=march_num)
+        for march_num in range(num_marchs - self.mpi_size):
+            self.logger.info(f"COLONY({self.id}): Interation {march_num}/{num_marchs}")
+            rnn = self.mpi_comm.recv(status=status)
+            self.logger.debug(
+                f"COLONY({self.id}): Main Process received Result from Worker({status.Get_source()})"
+            )
             if rnn.centeroids_clusters:
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()
             self.insert_rnn(rnn)
-
-        march = 0
-        threads = []
-        for _ in range(min(total_marchs, num_threads)):
-            rnn = prepare_rnn()
-            threads.append(
-                {"thread": th.Thread(target=thread_worker, args=(rnn,)), "rnn": rnn}
+            if self.use_cants:
+                rnn = self.create_nn_cants()
+            else:
+                rnn = self.create_nn_ants()
+            self.logger.debug(
+                f"COLONY({self.id}): Main Process sending Task to Worker({status.Get_source()})"
             )
-            threads[-1]["thread"].start()
-        turn = True
-        while turn:
-            for t in threads:
-                if not t["thread"].is_alive():
-                    process_rnn(t["rnn"])
-                    march += 1
-                    self.logger.info(
-                        f"COLONY({self.id}): Interation {march}/{total_marchs}"
-                    )
-                    if march == total_marchs:
-                        turn = False
-                        break
-                    threads.remove(t)
-                    rnn = prepare_rnn()
-                    threads.append(
-                        {
-                            "thread": th.Thread(target=thread_worker, args=(rnn,)),
-                            "rnn": rnn,
-                        }
-                    )
-                    threads[-1]["thread"].start()
-                    break
+            self.mpi_comm.send(rnn, status.Get_source())
+        for march_num_ in range(1, self.mpi_size):
+            self.logger.info(
+                f"COLONY({self.id}): Interation {march_num+march_num_}/{num_marchs}"
+            )
+            rnn = self.mpi_comm.recv(status=status)
+            self.logger.debug(
+                f"COLONY({self.id}): Main Process received Result from Worker({status.Get_source()})"
+            )
+            self.insert_rnn(rnn)
+            self.mpi_comm.send(None, status.Get_source())
+            self.logger.debug(
+                f"COLONY({self.id}): Main Process sending Termination Msg to Worker({status.Get_source()})"
+            )
+
+    def worker(
+        self,
+    ) -> None:
+        """
+        for BP training RNNs asychronously: trains RNN
+        """
+        while True:
+            rnn = self.mpi_comm.recv(source=0)
+            self.logger.debug(
+                f"COLONY({self.id}): Worker({self.rank}) received Task from Main Process"
+            )
+            if rnn:
+                rnn = self.evaluate_rnn(rnn)
+                self.mpi_comm.send(rnn, dest=0)
+                self.logger.debug(
+                    f"COLONY({self.id}): Worker({self.rank}) sent Result to Main Process"
+                )
+            else:
+                self.logger.debug(
+                    f"COLONY({self.id}): Worker({self.rank}) received Termination Msg from Main Process"
+                )
+                break
 
     def live(self, total_marchs) -> None:
         """
         Do one colony foraging step
         """
-        if self.num_threads != 0:
-            self.logger.info("COLONY({self.id}):: Starting ANTS")
-            self.thread_controller(total_marchs, self.num_threads)
+        if self.mpi_size != 0:
+            if self.rank == 0:
+                self.main_process(total_marchs)
+            else:
+                self.worker()
         else:
-            self.logger.info("COLONY({self.id}):: Starting CANTS")
             for march_num in range(total_marchs):
                 self.logger.info(
-                    f"Colony({self.id}): Iteration {march_num}/{total_marchs}"
+                    f"Colony({self.id}): Interation {march_num}/{total_marchs}"
                 )
                 rnn = self.create_nn_cants()
                 rnn = self.evaluate_rnn(rnn)
@@ -514,18 +557,32 @@ class Colony:
 
 if __name__ == "__main__":
 
+    mpi_comm = MPI.COMM_WORLD
+    mpi_size = mpi_comm.Get_size()
+    rank = mpi_comm.Get_rank()
+
     args = Args_Parser(sys.argv)
 
     logger.remove()
     logger.add(sys.stderr, level=args.term_log_level)
 
+    data_dir = "2018_coal"
+    input_params = "Conditioner_Inlet_Temp,Conditioner_Outlet_Temp".replace(",", " ")
+    output_params = "Main_Flm_Int"
+    data_files = args.data_files
+    input_params = args.input_names
+    output_params = args.output_names
+    data_dir = args.data_dir
     data = Timeseries(
-        data_files=args.data_files,
-        input_params=args.input_names,
-        output_params=args.output_names,
-        data_dir=args.data_dir,
+        data_files=data_files,
+        input_params=input_params,
+        output_params=output_params,
+        data_dir=data_dir,
     )
-
+    data.train_input = data.train_input[:20]
+    data.test_input = data.test_input[:20]
+    data.train_output = data.train_output[:20]
+    data.test_output = data.test_output[:20]
     colony = Colony(
         data=data,
         num_ants=args.num_ants,
@@ -541,15 +598,11 @@ if __name__ == "__main__":
         log_dir=args.log_dir,
         logger=logger,
         col_log_level=args.col_log_level,
-        log_file_name=args.log_file_name,
-        num_threads=args.num_threads,
-        ants_mortality=None,
-        use_cants=args.use_cants,
+        mpi_comm=mpi_comm,
     )
 
     colony.live(args.living_time)
 
-    if args.use_cants:
+    if rank == 0:
         colony.use_bp = True
-        colony.num_epochs = 1000
         colony.evaluate_rnn(colony.best_rnns[0][1])

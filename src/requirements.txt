@@ -2,7 +2,6 @@ loguru==0.5.3
 mpi4py==3.1.2
 numpy==1.21.2
 pandas==1.2.4
-pytest==6.2.5
 scikit_learn==1.0.2
 torch==1.9.0
 tqdm==4.60.0
