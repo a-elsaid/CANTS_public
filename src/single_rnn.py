@@ -21,9 +21,8 @@ def train_single_rnn(num_epochs, lags, data, hidden_layers, hidden_nodes=None) -
     logger.info(f"Single RNN:: Staring Single Fully Connected RNN Training/Testing")
     for i in tqdm(range(num_epochs)):
         rnn.do_epoch(data.train_input, data.train_output)
-        rnn.feedbackward()
-        if i % 100 == 0:
-            logger.info(f"Single RNN:: BP Training MSE: {rnn.err}")
+        if i % 5 == 0:
+            logger.info(f"Single RNN:: BP Training MSE: {rnn.total_err}")
     rnn.test_rnn(data.test_input, data.test_output)
     logger.info(f"Single RNN:: Testing MSE: {rnn.fitness}")
 
@@ -42,4 +41,4 @@ if __name__ == "__main__":
         output_params=args.output_names,
         data_dir=args.data_dir,
     )
-    train_single_rnn(num_epochs=40, lags=10, data=data, hidden_layers=5)
+    train_single_rnn(num_epochs=2000, lags=5, data=data, hidden_layers=5)

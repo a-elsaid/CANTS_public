@@ -2,6 +2,7 @@
 import sys
 from typing import List, Dict
 import numpy as np
+from tqdm import tqdm
 import torch
 from loguru import logger
 from helper import ACTIVATIONS, LOSS
@@ -22,20 +23,22 @@ class Node:
         self,
         point,
         lag: int,
-        activation_type: str = "sigmoid",
+        activation_type: str = "relu",
     ) -> None:
         self.id = self.counter
         self.activation = ACTIVATIONS[activation_type]
         self.lag = lag
         self.point = point
+        self.type = self.point.type
         self.bias = 0.0
-        if self.point.name:
+        """
+        if self.type == 0:
             self.bias = torch.tensor(
                 np.random.random(), dtype=torch.float32, requires_grad=True
             )
+        """
         self.fan_in = []  # Coming in nodes
         self.fan_out = {}  # Going out edges and their nodes
-        self.type = self.point.type
         self.value = torch.tensor(
             0.0, dtype=torch.float32, requires_grad=False
         )  # value in node
@@ -67,10 +70,13 @@ class Node:
         self.value = self.activation(self.value + self.bias)
         self.fired = True
         for edge in self.fan_out.values():
+            logger.debug(f"\t Node({self.id}) Sent Signal {self.value} * {edge.weight} ({self.value * edge.weight}) to Node({edge.out_node.id})")
             edge.out_node.synaptic_signal(self.value * edge.weight)
         with torch.no_grad():
             if self.type != 2:
-                self.value = 0.0
+                self.value = torch.tensor(0.0, dtype=torch.float32, requires_grad=False)
+        """
+        """
 
     def synaptic_signal(self, signal: float) -> None:
         """
@@ -125,14 +131,17 @@ class RNN:
         paths,
         lags: int,
         loss_fun: str = "mse",
+        act_fun: str = "sigmoid",
         centeroids_clusters: Dict[int, np.ndarray] = None,
     ):
         self.fitness: float = None
         self.err: torch.float32 = torch.tensor(0.0, dtype=torch.float32)
+        self.total_err = 0.0
         self.nodes: Dict[int, Node] = {}
         self.input_nodes: List[Node] = []
         self.output_nodes: List[Node] = []
         logger.debug(f"LOSS type: {loss_fun}  ")
+        self.act_fun = act_fun
         self.loss_fun = LOSS[loss_fun]
         self.centeroids_clusters = centeroids_clusters
         self.lags = lags
@@ -140,7 +149,7 @@ class RNN:
         for point in [pnt for path in paths for pnt in path]:
             if point.id in self.nodes:
                 continue
-            node = Node(point, point.pos_l)
+            node = Node(point, point.pos_l, activation_type=self.act_fun)
             self.nodes[point.id] = node
             if point.type == 0:
                 self.input_nodes.append(node)
@@ -190,12 +199,11 @@ class RNN:
             self.nodes[node.id] = node
             self.output_nodes.append(node)
 
-        hid_layers = 0
         next_layer = self.output_nodes
         for _ in range(hid_layers):
             curr_layer = []
             for _ in range(hid_nodes):
-                node = Node(Point(None, None, 0, None, None), l)
+                node = Node(Point(None, None, 1, None, None), l)
                 self.nodes[node.id] = node
                 curr_layer.append(node)
             for in_node in curr_layer:
@@ -247,22 +255,24 @@ class RNN:
             node.value = 0.0
         return res
 
-    def do_epoch(self, inputs: np.ndarray, outputs: np.ndarray, loss_fun=None) -> None:
+    def do_epoch(self, inputs: np.ndarray, outputs: np.ndarray, loss_fun=None, do_feedbck=True) -> None:
         """
         perform one epoch using the whole dataset
         """
         if not loss_fun:
             loss_fun = self.loss_fun
-        self.err = [0.0 for i in range(len(outputs[0]))]
-        for i in range(len(inputs) - self.lags):
+        self.total_err = 0.0
+        err = None
+        for i in tqdm(range(len(inputs) - self.lags)):
             res = self.feedforward(inputs[i : i + self.lags])
             logger.debug(f"feedforward return (output nodes values): {res}")
-            self.err = [
-                e + loss for e, loss in zip(self.err, loss_fun(res, outputs[i]))
-            ]
-            logger.debug(f"ERR in do_epoch loop:: {self.err}")
-        self.err = [e / (i + 1) for e in self.err]
-        self.err = sum(self.err) / len(self.err)
+            err = [loss for loss in loss_fun(res, outputs[i])]
+            err = sum(err)/len(err)
+            self.total_err+=err
+            if do_feedbck: 
+                self.feedbackward(err)
+        self.total_err/=i
+        logger.info(f"Training Epoch average Total Error: {self.total_err}")
 
     def test_rnn(self, inputs: np.ndarray, outputs: np.ndarray, loss_fun=None) -> None:
         """
@@ -273,24 +283,22 @@ class RNN:
         with torch.no_grad():
             if not loss_fun:
                 loss_fun = self.loss_fun
-
-            err = [torch.tensor(0.0) for i in range(len(outputs[0]))]
+            err = 0.0
             for i in range(len(inputs) - self.lags):
                 res = self.feedforward(inputs[i : i + self.lags])
-                err = [e + loss for e, loss in zip(err, loss_fun(res, outputs[i]))]
-            err = [e / (i + 1) for e in err]
-            err = sum(err) / len(err)
-
-            self.fitness = err.item()
+                e = [loss for loss in loss_fun(res, outputs[i])]
+                e = sum(e) / len(e)
+                err+= e
+            self.fitness = err.item()/i
 
     def feedbackward(
-        self,
+        self,err
     ) -> None:
         """
         calculating gradients
         """
         logger.debug(f"ERR: {self.err}")
-        self.err.backward()
+        err.backward()
         for node in self.nodes.values():
             for edge in node.fan_out.values():
                 with torch.no_grad():

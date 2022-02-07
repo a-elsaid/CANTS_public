@@ -15,8 +15,8 @@ import warnings
 import threading as th
 import numpy as np
 from sklearn.cluster import DBSCAN
-from tqdm import tqdm
 from loguru import logger
+from tqdm import tqdm
 import torch
 from search_space_cants import RNNSearchSpaceCANTS
 from search_space_ants import RNNSearchSpaceANTS
@@ -39,7 +39,7 @@ class Colony:
     def __init__(
         self,
         data: Timeseries,
-        logger,
+        logger: logger,
         use_cants: bool,
         use_bp: bool,
         num_epochs: int,
@@ -53,13 +53,17 @@ class Colony:
         dbscan_dist: float,
         evaporation_rate: float,
         log_dir: str,
+        out_dir: str,
         num_threads: int,
         search_space=None,
         col_log_level: str = "INFO",
         log_file_name: str = "",
+        loss_fun: str = "",
+        act_fun: str = "",
     ) -> None:
         self.num_threads = num_threads
         self.logger = logger
+        self.out_dir = out_dir
         self.log_file_name = log_file_name
         self.col_log_level = col_log_level
         self.id = self.counter
@@ -74,11 +78,9 @@ class Colony:
         self.use_bp = use_bp
         self.log_dir = log_dir
         self.use_cants = use_cants
-        if not self.use_cants:
-            self.use_bp = True
-            if self.num_epochs == 0:
-                self.logger.error("Error: Starting ANTS with 0 Number of Epochs")
-                sys.exit()
+        if self.use_bp and self.num_epochs == 0:
+            self.logger.error("Error: Starting ANTS with 0 Number of Epochs")
+            sys.exit()
         self.num_ants = num_ants
         self.best_population_size = population_size
         self.mortality_rate = ants_mortality
@@ -88,6 +90,8 @@ class Colony:
         self.default_pheromone = default_pheromone
         self.dbscan_dist = dbscan_dist
         self.data = data
+        self.loss_fun = loss_fun
+        self.act_fun = act_fun
         self.space = search_space
         if not self.space:
             if self.use_cants:
@@ -110,7 +114,7 @@ class Colony:
                 )
 
         self.foragers = [
-            Ant(i + 1, self.logger, colony_id=self.id, log_dir=self.log_dir)
+            Ant(ant_id=i + 1, logger=self.logger, sense_range=np.random.uniform(low=0.1, high=0.9), colony_id=self.id, log_dir=self.log_dir)
             for i in range(self.num_ants)
         ]
         self.best_rnns = []
@@ -134,7 +138,6 @@ class Colony:
         for i, pos in enumerate(self.pso_position):
             r1 = np.random.random()
             r2 = np.random.random()
-
             vel_cognitive = c1 * r1 * (self.pso_best_position[i] - pos)
             vel_social = c2 * r2 * (pos_best_g[i] - pos)
             self.pso_velocity[i] = w * self.pso_velocity[i] + vel_cognitive + vel_social
@@ -317,7 +320,7 @@ class Colony:
                 next_link = np.random.choice(out_links, 1, p=norm_pheromones)[0]
                 cur_pnt = next_link.out_node
                 paths[a].append(cur_pnt)
-        return RNN(paths=paths, centeroids_clusters=None, lags=self.space_lags)
+        return RNN(paths=paths, centeroids_clusters=None, lags=self.space_lags, loss_fun=self.loss_fun, act_fun=self.act_fun)
 
     def create_nn_cants(
         self,
@@ -387,7 +390,7 @@ class Colony:
                 )
         self.logger.info(f"COLONY({self.id}):: Finished building RNN from Ants' paths")
         return RNN(
-            paths=condensed_paths, centeroids_clusters=clusters, lags=self.space_lags
+            paths=condensed_paths, centeroids_clusters=clusters, lags=self.space_lags, loss_fun=self.loss_fun
         )
 
     def insert_rnn(self, rnn: RNN) -> None:
@@ -408,37 +411,37 @@ class Colony:
         self.logger.info(
             f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.5f} (Best RNN Fitness: {self.best_rnns[0][0]:.5f})"
         )
-        if rnn.fitness > 1.0:
-            self.logger.error(f"Error: Fitness greater than 1.0 ({rnn.fitness})")
-            sys.exit()
 
     def evaluate_rnn(self, rnn: RNN) -> None:
         """
         training/testing RNN
         """
         self.logger.info(f"COLONY({self.id}):: Staring RNN Colony Evaluating")
+
+        self.logger.info(f"COLONY({self.id}):: \t starting training")
         if self.use_bp:
             self.logger.info(
-                f"\tCOLONY({self.id}):: Using BP, (number of Epochs({self.num_epochs})"
+                f"\tCOLONY({self.id}):: Using BP, (number of Epochs: {self.num_epochs})"
             )
             for i in tqdm(range(self.num_epochs)):
-                rnn.do_epoch(self.data.train_input, self.data.train_output)
-                rnn.feedbackward()
-                if i % 100 == 0:
-                    self.logger.info(f"COLONY({self.id}):: BP Training MSE: {rnn.err}")
-            rnn.test_rnn(self.data.test_input, self.data.test_output)
-            self.logger.info(f"Testing MSE: {rnn.fitness}")
+                rnn.do_epoch(self.data.train_input, self.data.train_output, do_feedbck=self.use_bp)
         else:
-            self.logger.info(f"COLONY({self.id}):: \t starting epoch")
-            rnn.do_epoch(self.data.train_input, self.data.train_output)
-            self.logger.info(f"COLONY({self.id}):: \t finished epoch")
-            self.logger.info(f"COLONY({self.id}):: \t starting RNN evaluation")
-            rnn.test_rnn(self.data.test_input, self.data.test_output)
-            self.logger.info(f"COLONY({self.id}):: \t finished RNN evaluation")
+            rnn.do_epoch(self.data.train_input, self.data.train_output, do_feedbck=self.use_bp)
+        self.logger.info(f"COLONY({self.id}):: \t finished training")
+
+        self.logger.info(f"COLONY({self.id}):: \t starting RNN evaluation")
+        rnn.test_rnn(self.data.test_input, self.data.test_output)
+        self.logger.info(f"COLONY({self.id}):: \t finished RNN evaluation")
+
         self.logger.info(f"COLONY({self.id}):: Finished RNN Colony Evaluation")
         return rnn
 
     def thread_controller(self, total_marchs, num_threads: int):
+        if self.use_cants:
+            logger.info("COLONY({self.id}):: Starting 3D CANTS (with threading)")
+        else:
+            logger.info("COLONY({self.id}):: Starting ANTS (with threading)")
+
         def thread_worker(rnn) -> None:
             """
             training/testing RNN
@@ -462,7 +465,7 @@ class Colony:
 
         march = 0
         threads = []
-        for _ in range(min(total_marchs, num_threads)):
+        for i in range(min(total_marchs, num_threads)):
             rnn = prepare_rnn()
             threads.append(
                 {"thread": th.Thread(target=thread_worker, args=(rnn,)), "rnn": rnn}
@@ -496,11 +499,11 @@ class Colony:
         Do one colony foraging step
         """
         if self.num_threads != 0:
-            self.logger.info("COLONY({self.id}):: Starting ANTS")
             self.thread_controller(total_marchs, self.num_threads)
         else:
-            self.logger.info("COLONY({self.id}):: Starting CANTS")
-            for march_num in range(total_marchs):
+            logger.info("COLONY({self.id}):: Starting BP-free 4D CANTS")
+            self.num_epochs = 1
+            for march_num in tqdm(range(total_marchs)):
                 self.logger.info(
                     f"Colony({self.id}): Iteration {march_num}/{total_marchs}"
                 )
@@ -510,6 +513,7 @@ class Colony:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()
                 self.insert_rnn(rnn)
+            self.num_epochs = 1
 
 
 if __name__ == "__main__":
@@ -524,6 +528,7 @@ if __name__ == "__main__":
         input_params=args.input_names,
         output_params=args.output_names,
         data_dir=args.data_dir,
+        future_time=1,
     )
 
     colony = Colony(
@@ -539,17 +544,20 @@ if __name__ == "__main__":
         dbscan_dist=args.dbscan_dist,
         evaporation_rate=args.evaporation_rate,
         log_dir=args.log_dir,
+        out_dir=args.out_dir,
         logger=logger,
         col_log_level=args.col_log_level,
         log_file_name=args.log_file_name,
         num_threads=args.num_threads,
-        ants_mortality=None,
+        ants_mortality=0.1,
         use_cants=args.use_cants,
+        loss_fun = args.loss_fun,
+        act_fun = args.act_fun,
     )
 
     colony.live(args.living_time)
 
     if args.use_cants:
         colony.use_bp = True
-        colony.num_epochs = 1000
+        colony.num_epochs = 2
         colony.evaluate_rnn(colony.best_rnns[0][1])

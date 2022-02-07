@@ -70,4 +70,10 @@ class Timeseries:
         return (data - data.mean()) / data.std()
 
     def min_max_normalize(self, data):
-        return (data - data.min()) / (data.max() - data.min())
+        for x in data:
+            min_ = data[x].min()
+            max_ = data[x].max()
+            if min_ == max_:
+                min_ = 0.0
+            data[x] =  (data[x] - min_)/(max_ - min_)
+        return data

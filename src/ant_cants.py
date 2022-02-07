@@ -22,7 +22,7 @@ class Ant:
         self,
         ant_id: int,
         logger,
-        sense_range: float = 0.1,
+        sense_range: float = 0.5,
         explore_rate: float = 0.5,
         mortality: float = 0.0,
         colony_id: int = None,

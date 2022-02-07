@@ -50,13 +50,15 @@ for c in range(args.num_colonies):
         dbscan_dist=args.dbscan_dist,
         evaporation_rate=evaporation_rate,
         log_dir=args.log_dir,
+        out_dir=args.out_dir,
         logger=logger,
         col_log_level=args.col_log_level,
         log_file_name=args.log_file_name,
         num_threads=args.num_threads,
-        ants_mortality=None,
+        ants_mortality=0.1,
         use_cants=args.use_cants,
-
+        loss_fun=args.loss_fun,
+        act_fun=args.act_fun,
     )
     colonies.append(colony)
 
@@ -123,5 +125,5 @@ best_rnn_colony.use_bp = True
 best_rnn_colony.evaluate_rnn(best_rnn_colony.best_rnns[0][1])
 
 
-with open("best_rnn.nn", "bw") as file_obj:
+with open("{}/{}_best_rnn.nn".format(args.out_dir, args.log_file_name), "bw") as file_obj:
     pickle.dump(best_rnn_colony.best_rnns[0][1], file_obj)

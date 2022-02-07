@@ -1,15 +1,15 @@
 import sys
-sys.path.append('..')
+sys.path.append('../src')
 from ant_cants import Ant
 import pytest
 import numpy as np
 from typing import Tuple, List
 from unittest import mock
 import torch
-from search_space_cants import Point, RNNSearchSpace
+from search_space_cants import RNNSearchSpaceCANTS
 from rnn import Node, Edge, RNN
 from helper import LOSS
-from data_prep import Timeseries
+from timeseries import Timeseries
 
 @pytest.fixture
 def current_ant_position() -> Tuple[float]:
@@ -28,31 +28,31 @@ def ant() -> Ant:
     return ant
 
 @pytest.fixture
-def search_space() -> RNNSearchSpace:
+def search_space() -> RNNSearchSpaceCANTS:
     return mock.Mock()
 
 @pytest.fixture
-def points_cluster() -> List[Point]:
+def points_cluster() -> List[RNNSearchSpaceCANTS.Point]:
     return points
 
 @pytest.fixture
-def search_space() -> RNNSearchSpace:
-    space = RNNSearchSpace(lags=10)
-    points  = [Point(0,0,2,0),
-               Point(1,0,0,0),
-               Point(1,1,0,0),
-               Point(1,1,2,1),
-               Point(1,0,0,1),
-               Point(0,1,0,0),
-               Point(0,1,0,1),
-               Point(0,0,2,1)]
+def search_space() -> RNNSearchSpaceCANTS:
+    space = RNNSearchSpaceCANTS(lags=10)
+    points  = [RNNSearchSpaceCANTS.Point(0,0,2,0),
+               RNNSearchSpaceCANTS.Point(1,0,0,0),
+               RNNSearchSpaceCANTS.Point(1,1,0,0),
+               RNNSearchSpaceCANTS.Point(1,1,2,1),
+               RNNSearchSpaceCANTS.Point(1,0,0,1),
+               RNNSearchSpaceCANTS.Point(0,1,0,0),
+               RNNSearchSpaceCANTS.Point(0,1,0,1),
+               RNNSearchSpaceCANTS.Point(0,0,2,1)]
     for pnt in points:
         space.all_points[pnt.id] = pnt
     return space
 
 
 class TestAnt:
-    def test_create_point(self, ant: Ant, search_space: RNNSearchSpace):
+    def test_create_point(self, ant: Ant, search_space: RNNSearchSpaceCANTS):
         lag = 10
         ant.current_l = 2
         current_point = current_ant_position
@@ -69,7 +69,7 @@ class TestAnt:
     def test_move(self, ant: Ant):
         assert ant.sense_range >0.0 and ant.sense_range<0.5
 
-    def test_ceter_of_mass(self, search_space: RNNSearchSpace, ant:Ant):
+    def test_ceter_of_mass(self, search_space: RNNSearchSpaceCANTS, ant:Ant):
         new_point = ant.center_of_mass(search_space.all_points.values())
         assert new_point.pos_x == 0.5
         assert new_point.pos_y == 0.5
@@ -77,8 +77,8 @@ class TestAnt:
         assert new_point.w == 0.5
 
 
-    def test_pick_point(self, ant: Ant, search_space: RNNSearchSpace):
-        pnt = Point(0.21, 0.21, 2, 0.51)
+    def test_pick_point(self, ant: Ant, search_space: RNNSearchSpaceCANTS):
+        pnt = RNNSearchSpaceCANTS.Point(0.21, 0.21, 2, 0.51)
         search_space.all_points[pnt.id] = pnt
         picked_point = ant.pick_point(search_space)
         assert pnt.pos_x == picked_point.pos_x and pnt.pos_y == picked_point.pos_y and pnt.pos_l == picked_point.pos_l and pnt.w == picked_point.w
@@ -95,12 +95,12 @@ class TestAnt:
 
 @pytest.fixture
 def single_node() -> Node:
-    node = Node(Point(0,0,2,0), 0.2)
+    node = Node(RNNSearchSpaceCANTS.Point(0,0,2,0), 0.2)
     node.bias = 0.1
-    node_out1 = Node(Point(0,1,2,0.4), 2)
+    node_out1 = Node(RNNSearchSpaceCANTS.Point(0,1,2,0.4), 2)
     node_out1.value = .8
     node_out1.bias = .3
-    node_out2 = Node(Point(0,2,1,0.6), 3)
+    node_out2 = Node(RNNSearchSpaceCANTS.Point(0,2,1,0.6), 3)
     node_out2.value = .6
     node_out2.bias = .4
     node.fan_out = {node_out1: Edge(node, node_out1, 0.2), node_out2: Edge(node, node_out2, 0.2)}
@@ -109,22 +109,22 @@ def single_node() -> Node:
 
 @pytest.fixture
 def rnn2() -> RNN:
-    p_in1 = Point(0.4,0,2,0.1,0,'in1')
+    p_in1 = RNNSearchSpaceCANTS.Point(0.4,0,2,0.1,0,'in1')
     p_in1.id = 0
 
-    p_in2 = Point(0,0,2,0.2,0,'in2')
+    p_in2 = RNNSearchSpaceCANTS.Point(0,0,2,0.2,0,'in2')
     p_in2.id = 1
 
-    p_hid1 = Point(0,0.1,2,0.2,1)
+    p_hid1 = RNNSearchSpaceCANTS.Point(0,0.1,2,0.2,1)
     p_hid1.id = 2
 
-    p_hid2 = Point(0,0.2,1,0.3,1)
+    p_hid2 = RNNSearchSpaceCANTS.Point(0,0.2,1,0.3,1)
     p_hid2.id = 3
 
-    p_out1 = Point(0,0.2,9,0.4,2, 'out1')
+    p_out1 = RNNSearchSpaceCANTS.Point(0,0.2,9,0.4,2, 'out1')
     p_out1.id = 4
 
-    p_out2 = Point(0,0.4,9,0.6,2, 'out2')
+    p_out2 = RNNSearchSpaceCANTS.Point(0,0.4,9,0.6,2, 'out2')
     p_out2.id = 5
 
     nn = RNN([[p_in1, p_hid1, p_out1],
@@ -134,7 +134,7 @@ def rnn2() -> RNN:
               [p_in2, p_hid1, p_out1],
               [p_in2, p_hid1, p_out2],
               [p_in2, p_hid2, p_out1],
-              [p_in2, p_hid2, p_out2]])
+              [p_in2, p_hid2, p_out2]], 1)
     for node in nn.nodes.values():
         node.bias = 0.0
         node.id = node.point.id
