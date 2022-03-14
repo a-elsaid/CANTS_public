@@ -167,9 +167,21 @@ class Colony:
         """
         Letting ants forage to create paths to create RNN
         """
-        for _, ant in enumerate(self.foragers):
+        def ant_thread_work(ant, space):
             ant.reset()
-            ant.forage(self.space)
+            ant.forage(space)
+            
+        threads = []
+        for ant in self.foragers:
+            threads.append(th.Thread(target=ant_thread_work, args=(ant, self.space)))
+            threads[-1].start()
+            # ant.reset()
+            # ant.forage(self.space)
+        for thread in threads:
+            thread.join()
+        for ant in self.foragers:
+            for pnt in ant.new_points:
+                self.space.all_points[pnt.id] = pnt
 
     def calcualte_distance_ceteroid_cluster(
         self,
@@ -333,7 +345,7 @@ class Colony:
         points = []
         for ant in self.foragers:
             for p in ant.path:
-                if not p.name:
+                if p.type not in [0,2]:
                     points.append(p)
         points_vertecies = np.array(
             [[p.pos_x, p.pos_y, p.pos_l, p.pos_w] for p in points]
@@ -353,7 +365,7 @@ class Colony:
         for i, ant in enumerate(self.foragers):
             prev_pnt = ant.path[0]
             for p in ant.path:
-                if p.name:  # checks if the point is for an input or output
+                if p.type in [0,2]:  # checks if the point is for an input or output
                     condensed_paths[i].append(p)
                     continue
                 label = labels[counter]
@@ -408,6 +420,7 @@ class Colony:
                 )  # TODO Put the other pheromone update options
         self.best_rnns = sorted(self.best_rnns, key=lambda r: r[0])
         self.space.evaporate_pheromone()
+        print ("FITNESS", rnn.fitness)
         self.logger.info(
             f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.5f} (Best RNN Fitness: {self.best_rnns[0][0]:.5f})"
         )

@@ -6,6 +6,7 @@ from tqdm import tqdm
 import torch
 from loguru import logger
 from helper import ACTIVATIONS, LOSS
+import ipdb 
 
 
 class Node:
@@ -34,14 +35,15 @@ class Node:
         """
         if self.type == 0:
             self.bias = torch.tensor(
-                np.random.random(), dtype=torch.float32, requires_grad=True
+                np.random.random(), dtype=torch.float64, requires_grad=True
             )
         """
         self.fan_in = []  # Coming in nodes
         self.fan_out = {}  # Going out edges and their nodes
         self.value = torch.tensor(
-            0.0, dtype=torch.float32, requires_grad=False
+            0.0, dtype=torch.float64, requires_grad=False
         )  # value in node
+        self.out = torch.tensor(0.0, dtype=torch.float64, requires_grad=False)
         self.signals_to_receive: int = 0  # number of fan_in
         self.waiting_signals: int = 0
         Node.counter += 1
@@ -58,7 +60,7 @@ class Node:
 
     def fire(
         self,
-    ) -> float:
+    ) -> None:
         """
         firing the node when activated
         """
@@ -67,16 +69,18 @@ class Node:
             f"Node({self.id}) [Point({self.point.id})] Fired: Sig({self.value} \
             + {self.bias}) = {self.activation(self.value + self.bias)}"
         )
-        self.value = self.activation(self.value + self.bias)
+        self.out = self.activation(self.value + self.bias)
         self.fired = True
+        logger.debug(f"Node({self.id}) fired: {self.out}")
         for edge in self.fan_out.values():
-            logger.debug(f"\t Node({self.id}) Sent Signal {self.value} * {edge.weight} ({self.value * edge.weight}) to Node({edge.out_node.id})")
-            edge.out_node.synaptic_signal(self.value * edge.weight)
+            logger.debug(f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})")
+            edge.out_node.synaptic_signal(self.out * edge.weight)
+
+    def reset_node(self,) -> None:
         with torch.no_grad():
-            if self.type != 2:
-                self.value = torch.tensor(0.0, dtype=torch.float32, requires_grad=False)
-        """
-        """
+            self.value = torch.tensor(0.0, dtype=torch.float64, requires_grad=False)
+            self.out = torch.tensor(0.0, dtype=torch.float64, requires_grad=False)
+
 
     def synaptic_signal(self, signal: float) -> None:
         """
@@ -99,6 +103,42 @@ class Node:
             logger.debug(f"Node({self.id}) is going to fire: {self.value}")
             self.fire()
 
+class LSTM_Node(Node):
+    def __init__(self, point, lag:int, activation_type: str = "relu", )-> None:
+        super().__init__(point, lag, activation_type)
+        self.wf = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.uf = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.wi = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.ui = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.wo = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.uo = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.wg = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.ug = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.ct = 0.0
+        self.ht = 0.0
+    
+    def fire(self) -> None:
+        self.waiting_signals = self.signals_to_receive
+        ft = self.activation(self.wf * self.value + self.uf * self.ht)
+        it = self.activation(self.wi * self.value + self.ui * self.ht)
+        ot = self.activation(self.wo * self.value + self.uo * self.ht)
+        c_ = self.activation(self.wg * self.value + self.ug * self.ht)
+        ct = ft * self.ct + it * c_
+        self.ct = ct.item()
+        self.out = ot * self.activation(ct)
+        self.ht = self.out.item()
+        logger.debug(f"Node({self.id}) fired: {self.out}")
+        """
+        if self.out > 2.0:
+            ipdb.sset_trace()
+        """
+        for edge in self.fan_out.values():
+            logger.debug(f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})")
+            edge.out_node.synaptic_signal(self.out * edge.weight)
+        self.fired = True
+        
+        
+
 
 class Edge:
     """
@@ -115,9 +155,9 @@ class Edge:
         self.in_node = in_node
         self.out_node = out_node
         if not weight:
-            weight = np.random.random()
+            weight = np.random.random() * 5
         self.weight = torch.tensor(
-            float(weight), dtype=torch.float32, requires_grad=True
+            float(weight), dtype=torch.float64, requires_grad=True
         )
 
 
@@ -135,7 +175,7 @@ class RNN:
         centeroids_clusters: Dict[int, np.ndarray] = None,
     ):
         self.fitness: float = None
-        self.err: torch.float32 = torch.tensor(0.0, dtype=torch.float32)
+        self.err: torch.float64 = torch.tensor(0.0, dtype=torch.float64)
         self.total_err = 0.0
         self.nodes: Dict[int, Node] = {}
         self.input_nodes: List[Node] = []
@@ -149,7 +189,7 @@ class RNN:
         for point in [pnt for path in paths for pnt in path]:
             if point.id in self.nodes:
                 continue
-            node = Node(point, point.pos_l, activation_type=self.act_fun)
+            node = LSTM_Node(point, point.pos_l, activation_type=self.act_fun)
             self.nodes[point.id] = node
             if point.type == 0:
                 self.input_nodes.append(node)
@@ -190,12 +230,12 @@ class RNN:
         Point = RNNSearchSpaceANTS.Point
         for i, name in enumerate(input_names):
             for l in range(lags):
-                node = Node(Point(None, None, 0, name, i), l)
+                node = LSTM_Node(Point(None, None, 0, name, i), l, self.act_fun)
                 self.nodes[node.id] = node
                 self.input_nodes.append(node)
 
         for name in output_names:
-            node = Node(Point(None, None, 2, name, i), lags - 1)
+            node = LSTM_Node(Point(None, None, 2, name, i), lags - 1, self.act_fun)
             self.nodes[node.id] = node
             self.output_nodes.append(node)
 
@@ -203,7 +243,7 @@ class RNN:
         for _ in range(hid_layers):
             curr_layer = []
             for _ in range(hid_nodes):
-                node = Node(Point(None, None, 1, None, None), l)
+                node = LSTM_Node(Point(None, None, 1, None, None), l, self.act_fun)
                 self.nodes[node.id] = node
                 curr_layer.append(node)
             for in_node in curr_layer:
@@ -250,9 +290,11 @@ class RNN:
         if raise_err:
             sys.exit()
 
-        res = [node.value for node in self.output_nodes]
+        res = [node.out for node in self.output_nodes]
+        """
         for node in self.output_nodes:
             node.value = 0.0
+        """
         return res
 
     def do_epoch(self, inputs: np.ndarray, outputs: np.ndarray, loss_fun=None, do_feedbck=True) -> None:
@@ -271,6 +313,8 @@ class RNN:
             self.total_err+=err
             if do_feedbck: 
                 self.feedbackward(err)
+            for node in self.nodes.values():
+                node.reset_node()
         self.total_err/=i
         logger.info(f"Training Epoch average Total Error: {self.total_err}")
 
@@ -297,16 +341,35 @@ class RNN:
         """
         calculating gradients
         """
-        logger.debug(f"ERR: {self.err}")
+        logger.debug(f"ERR: {err}")
         err.backward()
-        for node in self.nodes.values():
-            for edge in node.fan_out.values():
-                with torch.no_grad():
-                    logger.debug(
-                        f"From Point {node.point.id} To Point \
-                        {edge.out_node.point.id}: dweight = {edge.weight.grad}"
-                    )
-                    logger.debug(f"\t Weight before update: {edge.weight}")
-                    edge.weight -= edge.weight.grad
-                    logger.debug(f"\t Weight after update: {edge.weight}")
-                edge.weight.grad.zero_()
+        with torch.no_grad():
+            for node in self.nodes.values():
+                for edge in node.fan_out.values():
+                        logger.debug(
+                            f"From Point {node.point.id} To Point \
+                            {edge.out_node.point.id}: dweight = {edge.weight.grad}"
+                        )
+                        logger.debug(f"\t Weight before update: {edge.weight}")
+                        edge.weight-= edge.weight.grad
+                        logger.debug(f"\t Weight after update: {edge.weight}")
+                        edge.weight.grad.zero_()
+                if isinstance(node, LSTM_Node):
+                    node.wf-= node.wf.grad
+                    node.uf-= node.uf.grad
+                    node.wi-= node.wi.grad
+                    node.ui-= node.ui.grad
+                    node.wo-= node.wo.grad
+                    node.uo-= node.uo.grad
+                    node.wg-= node.wg.grad
+                    node.ug-= node.ug.grad
+                    if torch.isnan(node.wf.grad):
+                        exit()
+                    node.wf.grad.zero_()
+                    node.uf.grad.zero_()
+                    node.wi.grad.zero_()
+                    node.ui.grad.zero_()
+                    node.wo.grad.zero_()
+                    node.uo.grad.zero_()
+                    node.wg.grad.zero_()
+                    node.ug.grad.zero_()

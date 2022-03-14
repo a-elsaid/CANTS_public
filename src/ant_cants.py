@@ -45,6 +45,7 @@ class Ant:
             List[float]
         ] = []  # [[RNN_performance, exploration_rate, sense_range, region_move]]
         self.logger = logger
+        self.new_points: List[Point] = []
 
     def update_best_behaviors(self, rnn_fitness) -> None:
         """
@@ -192,7 +193,7 @@ class Ant:
         # with space_lock:
         proximity_points = self.get_proximity_points(space.all_points, same_level=False)
         if len(proximity_points) == 0:
-            return self.create_point(space)
+            return self.create_point(space.time_lags)
         point = self.center_of_mass(proximity_points)
         if point.pos_l <= self.current_l:
             proximity_points = self.get_proximity_points(
@@ -210,12 +211,14 @@ class Ant:
                 break
         return point
 
-    def create_point(self, space: RNNSearchSpaceCANTS) -> RNNSearchSpaceCANTS.Point:
+    #def create_point(self, space: RNNSearchSpaceCANTS) -> RNNSearchSpaceCANTS.Point:
+    def create_point(self, time_lags: int) -> RNNSearchSpaceCANTS.Point:
         """
         Create a new point to be added to the search space
         """
 
-        new_l = np.random.randint(self.current_l, space.time_lags - 1, dtype=int)
+        # new_l = np.random.randint(self.current_l, space.time_lags - 1, dtype=int)
+        new_l = np.random.randint(self.current_l, time_lags - 1, dtype=int)
         new_w = np.random.random()
         new_x = 99
         while new_x < 0.0 or new_x > 1.0:
@@ -235,7 +238,8 @@ class Ant:
         )
         new_point = RNNSearchSpaceCANTS.Point(new_x, new_y, new_l, new_w)
         # with space_lock:
-        space.all_points[new_point.id] = new_point
+        # space.all_points[new_point.id] = new_point
+        self.new_points.append(new_point)
         return new_point
 
     def move(self, space: RNNSearchSpaceCANTS) -> None:
@@ -254,7 +258,7 @@ class Ant:
                     sys.exit()
 
             else:
-                point = self.create_point(space)
+                point = self.create_point(space.time_lags)
                 if point.pos_l <= self.current_l and point.pos_y < self.current_y:
                     self.logger.error(
                         f"Create Point P.l:{point.pos_l} P.y:{point.pos_y} Ant.l: {self.current_l} Ant.y: {self.current_y}"
@@ -289,3 +293,4 @@ class Ant:
         self.current_y = 0.0
         self.current_w = 0.0
         self.current_l = 0
+        self.new_points = []

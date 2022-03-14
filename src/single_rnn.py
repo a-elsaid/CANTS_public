@@ -41,4 +41,4 @@ if __name__ == "__main__":
         output_params=args.output_names,
         data_dir=args.data_dir,
     )
-    train_single_rnn(num_epochs=2000, lags=5, data=data, hidden_layers=5)
+    train_single_rnn(num_epochs=2000, lags=5, data=data, hidden_layers=10)
