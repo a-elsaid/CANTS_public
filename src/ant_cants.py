@@ -45,7 +45,7 @@ class Ant:
             List[float]
         ] = []  # [[RNN_performance, exploration_rate, sense_range, region_move]]
         self.logger = logger
-        self.new_points: List[Point] = []
+        self.new_points: List[RNNSearchSpaceCANTS.Point] = []
 
     def update_best_behaviors(self, rnn_fitness) -> None:
         """
@@ -211,7 +211,7 @@ class Ant:
                 break
         return point
 
-    #def create_point(self, space: RNNSearchSpaceCANTS) -> RNNSearchSpaceCANTS.Point:
+    # def create_point(self, space: RNNSearchSpaceCANTS) -> RNNSearchSpaceCANTS.Point:
     def create_point(self, time_lags: int) -> RNNSearchSpaceCANTS.Point:
         """
         Create a new point to be added to the search space
@@ -253,7 +253,11 @@ class Ant:
                 point = self.pick_point(space)
                 if point.pos_l <= self.current_l and point.pos_y < self.current_y:
                     self.logger.error(
-                        f"Picked Point Error: P.type:{point.type} P.l:{point.pos_l} P.y:{point.pos_y} Ant.l: {self.current_l} Ant.y: {self.current_y}"
+                        f"Picked Point Error: P.type:{point.type} \
+                        P.l:{point.pos_l} \
+                        P.y:{point.pos_y} \
+                        Ant.l: {self.current_l} \
+                        Ant.y: {self.current_y}"
                     )
                     sys.exit()
 
@@ -261,7 +265,11 @@ class Ant:
                 point = self.create_point(space.time_lags)
                 if point.pos_l <= self.current_l and point.pos_y < self.current_y:
                     self.logger.error(
-                        f"Create Point P.l:{point.pos_l} P.y:{point.pos_y} Ant.l: {self.current_l} Ant.y: {self.current_y}"
+                        f"Create Point \
+                        P.l:{point.pos_l} \
+                        P.y:{point.pos_y} \
+                        Ant.l: {self.current_l} \
+                        Ant.y: {self.current_y}"
                     )
                     sys.exit()
 

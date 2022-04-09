@@ -6,7 +6,7 @@ from tqdm import tqdm
 import torch
 from loguru import logger
 from helper import ACTIVATIONS, LOSS
-import ipdb 
+import ipdb
 
 
 class Node:
@@ -73,14 +73,17 @@ class Node:
         self.fired = True
         logger.debug(f"Node({self.id}) fired: {self.out}")
         for edge in self.fan_out.values():
-            logger.debug(f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})")
+            logger.debug(
+                f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})"
+            )
             edge.out_node.synaptic_signal(self.out * edge.weight)
 
-    def reset_node(self,) -> None:
+    def reset_node(
+        self,
+    ) -> None:
         with torch.no_grad():
             self.value = torch.tensor(0.0, dtype=torch.float64, requires_grad=False)
             self.out = torch.tensor(0.0, dtype=torch.float64, requires_grad=False)
-
 
     def synaptic_signal(self, signal: float) -> None:
         """
@@ -103,20 +106,42 @@ class Node:
             logger.debug(f"Node({self.id}) is going to fire: {self.value}")
             self.fire()
 
+
 class LSTM_Node(Node):
-    def __init__(self, point, lag:int, activation_type: str = "relu", )-> None:
+    def __init__(
+        self,
+        point,
+        lag: int,
+        activation_type: str = "relu",
+    ) -> None:
         super().__init__(point, lag, activation_type)
-        self.wf = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
-        self.uf = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
-        self.wi = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
-        self.ui = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
-        self.wo = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
-        self.uo = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
-        self.wg = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
-        self.ug = torch.tensor(np.random.random()*5, dtype=torch.float64, requires_grad=True)
+        self.wf = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
+        self.uf = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
+        self.wi = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
+        self.ui = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
+        self.wo = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
+        self.uo = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
+        self.wg = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
+        self.ug = torch.tensor(
+            np.random.random() * 5, dtype=torch.float64, requires_grad=True
+        )
         self.ct = 0.0
         self.ht = 0.0
-    
+
     def fire(self) -> None:
         self.waiting_signals = self.signals_to_receive
         ft = self.activation(self.wf * self.value + self.uf * self.ht)
@@ -133,11 +158,11 @@ class LSTM_Node(Node):
             ipdb.sset_trace()
         """
         for edge in self.fan_out.values():
-            logger.debug(f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})")
+            logger.debug(
+                f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})"
+            )
             edge.out_node.synaptic_signal(self.out * edge.weight)
         self.fired = True
-        
-        
 
 
 class Edge:
@@ -297,7 +322,9 @@ class RNN:
         """
         return res
 
-    def do_epoch(self, inputs: np.ndarray, outputs: np.ndarray, loss_fun=None, do_feedbck=True) -> None:
+    def do_epoch(
+        self, inputs: np.ndarray, outputs: np.ndarray, loss_fun=None, do_feedbck=True
+    ) -> None:
         """
         perform one epoch using the whole dataset
         """
@@ -309,13 +336,13 @@ class RNN:
             res = self.feedforward(inputs[i : i + self.lags])
             logger.debug(f"feedforward return (output nodes values): {res}")
             err = [loss for loss in loss_fun(res, outputs[i])]
-            err = sum(err)/len(err)
-            self.total_err+=err
-            if do_feedbck: 
+            err = sum(err) / len(err)
+            self.total_err += err
+            if do_feedbck:
                 self.feedbackward(err)
             for node in self.nodes.values():
                 node.reset_node()
-        self.total_err/=i
+        self.total_err /= i
         logger.info(f"Training Epoch average Total Error: {self.total_err}")
 
     def test_rnn(self, inputs: np.ndarray, outputs: np.ndarray, loss_fun=None) -> None:
@@ -332,12 +359,10 @@ class RNN:
                 res = self.feedforward(inputs[i : i + self.lags])
                 e = [loss for loss in loss_fun(res, outputs[i])]
                 e = sum(e) / len(e)
-                err+= e
-            self.fitness = err.item()/i
+                err += e
+            self.fitness = err.item() / i
 
-    def feedbackward(
-        self,err
-    ) -> None:
+    def feedbackward(self, err) -> None:
         """
         calculating gradients
         """
@@ -346,23 +371,23 @@ class RNN:
         with torch.no_grad():
             for node in self.nodes.values():
                 for edge in node.fan_out.values():
-                        logger.debug(
-                            f"From Point {node.point.id} To Point \
+                    logger.debug(
+                        f"From Point {node.point.id} To Point \
                             {edge.out_node.point.id}: dweight = {edge.weight.grad}"
-                        )
-                        logger.debug(f"\t Weight before update: {edge.weight}")
-                        edge.weight-= edge.weight.grad
-                        logger.debug(f"\t Weight after update: {edge.weight}")
-                        edge.weight.grad.zero_()
+                    )
+                    logger.debug(f"\t Weight before update: {edge.weight}")
+                    edge.weight += edge.weight.grad
+                    logger.debug(f"\t Weight after update: {edge.weight}")
+                    edge.weight.grad.zero_()
                 if isinstance(node, LSTM_Node):
-                    node.wf-= node.wf.grad
-                    node.uf-= node.uf.grad
-                    node.wi-= node.wi.grad
-                    node.ui-= node.ui.grad
-                    node.wo-= node.wo.grad
-                    node.uo-= node.uo.grad
-                    node.wg-= node.wg.grad
-                    node.ug-= node.ug.grad
+                    node.wf -= node.wf.grad
+                    node.uf -= node.uf.grad
+                    node.wi -= node.wi.grad
+                    node.ui -= node.ui.grad
+                    node.wo -= node.wo.grad
+                    node.uo -= node.uo.grad
+                    node.wg -= node.wg.grad
+                    node.ug -= node.ug.grad
                     if torch.isnan(node.wf.grad):
                         exit()
                     node.wf.grad.zero_()

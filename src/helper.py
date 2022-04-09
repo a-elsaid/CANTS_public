@@ -208,7 +208,7 @@ class Args_Parser:
                 self.act_fun = args[count]
             else:
                 logger.error(f"Unknown Commandline Arguement: {args[count]}")
-                print ("=================================================")
+                print("=================================================")
                 self.print_info()
             count += 1
         if self.data_files == "":
@@ -253,44 +253,65 @@ class Args_Parser:
         if not os.path.exists(self.data_dir):
             logger.error(f"Data folder ({self.data_dir})does not exit")
         if not os.path.exists(self.log_dir):
-            os.mkdir(self.log_dir)
+            os.makedirs(self.log_dir, exist_ok = True)
         if not os.path.exists(self.out_dir):
-            os.mkdir(self.out_dir)
+            os.makedirs(self.out_dir, exist_ok = True)
 
-
-    def print_info(self,):
-                print(
-                    "To run the program: python <src/colony.py> or <src/colonies.py> and then the following parameters:"
-                )
-                print("Data Directory (Required):                   --data_dir or -d")
-                print("Log Directory (Defualt=./):                  --log_dir or -x")
-                print("Data Files (Required):                       --data_files or -f")
-                print("Input Parameters (required):                 --input_names or -inms")
-                print("Output Parameters (required):                --output_names or -onms")
-                print("Log file (Defualt=""):                       --log_file_name or -lfn")
-                print("File Log Level (Defualt=INFO):               --file_log_level or -fl")
-                print("Terminal Log Level (Defualt=INFO):           --term_log_level or -tl")
-                print("Colony Log Level (Defualt=INFO):             --col_log_level or -cl")
-                print("Output Directory (Defualt=./):               --out_dir or -o")
-                print("Use CANTS (Default=False):                   --use_cants or -cants")
-                print("Use Backpropagation (Default=False):         --use_bp or -b")
-                print("Backpropagation Epochs (Defualt=0):          --bp_epochs or -e")
-                print("Number of Ants (Defualt=10):                 --num_ants or -a")
-                print("Max Pheromone (Defualt=10.0):                --max_pheromone or -m")
-                print("Min Pheromone (Defualt=0.5):                 --min_pheromone or -n")
-                print("Ant Population (Defualt=10):                 --ant_population or -s")
-                print("Colony Population (Defualt=10):              --colony_population or -c")
-                print("Time Lags (Defualt=5):                       --lags or -t")
-                print("Defualt Pheromone (Defualt=1.0):             --default_pheromone or -dph")
-                print("Evaporation Rate (Defualt=0.9):              --evaporation_rate or -evp")
-                print("Max DBSCAN Distance (Defualt=0.1):           --max_dbscan_dist or -dbdst")
-                print("Max DBSCAN Samples (Defualt=2):              --max_dbscan_smpl or -dbsmpl")
-                print("Number of Colonies (Defualt=20):             --num_col or -nc")
-                print("Colonies Communication Intervals (Defualt=50):           --comm_interval or -comi")
-                print("Colinies Living Iterations (Defualt=1000):               --living_time or -livt")
-                print("Number of Hidden Layers (Defualt=0):                     --hid_layers or -hl")
-                print("Number of Hidden Nodes (Defualt=0):                      --hid_nodes or -hn")
-                print("Number of Threads (Defualt=0):                           --num_threads or -nt")
-                print("Loss Function (Defualt=mse [mse, mae]):                  --loss_fun or -lf")
-                print("Activation Function (Defualt=sigmoid [sigmoid, relu, tanh, softmax, leaky_relu]):   --act_fun or -af")
-                sys.exit()
+    def print_info(
+        self,
+    ):
+        print(
+            "To run the program: python <src/colony.py> or <src/colonies.py> and then the following parameters:"
+        )
+        print("Data Directory (Required):                   --data_dir or -d")
+        print("Log Directory (Defualt=./):                  --log_dir or -x")
+        print("Data Files (Required):                       --data_files or -f")
+        print("Input Parameters (required):                 --input_names or -inms")
+        print("Output Parameters (required):                --output_names or -onms")
+        print("Log file (Defualt=" "):                       --log_file_name or -lfn")
+        print("File Log Level (Defualt=INFO):               --file_log_level or -fl")
+        print("Terminal Log Level (Defualt=INFO):           --term_log_level or -tl")
+        print("Colony Log Level (Defualt=INFO):             --col_log_level or -cl")
+        print("Output Directory (Defualt=./):               --out_dir or -o")
+        print("Use CANTS (Default=False):                   --use_cants or -cants")
+        print("Use Backpropagation (Default=False):         --use_bp or -b")
+        print("Backpropagation Epochs (Defualt=0):          --bp_epochs or -e")
+        print("Number of Ants (Defualt=10):                 --num_ants or -a")
+        print("Max Pheromone (Defualt=10.0):                --max_pheromone or -m")
+        print("Min Pheromone (Defualt=0.5):                 --min_pheromone or -n")
+        print("Ant Population (Defualt=10):                 --ant_population or -s")
+        print("Colony Population (Defualt=10):              --colony_population or -c")
+        print("Time Lags (Defualt=5):                       --lags or -t")
+        print(
+            "Defualt Pheromone (Defualt=1.0):             --default_pheromone or -dph"
+        )
+        print("Evaporation Rate (Defualt=0.9):              --evaporation_rate or -evp")
+        print(
+            "Max DBSCAN Distance (Defualt=0.1):           --max_dbscan_dist or -dbdst"
+        )
+        print(
+            "Max DBSCAN Samples (Defualt=2):              --max_dbscan_smpl or -dbsmpl"
+        )
+        print("Number of Colonies (Defualt=20):             --num_col or -nc")
+        print(
+            "Colonies Communication Intervals (Defualt=50):           --comm_interval or -comi"
+        )
+        print(
+            "Colinies Living Iterations (Defualt=1000):               --living_time or -livt"
+        )
+        print(
+            "Number of Hidden Layers (Defualt=0):                     --hid_layers or -hl"
+        )
+        print(
+            "Number of Hidden Nodes (Defualt=0):                      --hid_nodes or -hn"
+        )
+        print(
+            "Number of Threads (Defualt=0):                           --num_threads or -nt"
+        )
+        print(
+            "Loss Function (Defualt=mse [mse, mae]):                  --loss_fun or -lf"
+        )
+        print(
+            "Activation Function (Defualt=sigmoid [sigmoid, relu, tanh, softmax, leaky_relu]):   --act_fun or -af"
+        )
+        sys.exit()

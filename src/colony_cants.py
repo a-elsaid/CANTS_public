@@ -11,6 +11,7 @@ also use as a PSO particle to evolve coexisting colonies
 """
 import sys
 from typing import List
+from time import time
 import warnings
 import threading as th
 import numpy as np
@@ -27,7 +28,6 @@ from helper import Args_Parser
 
 warnings.filterwarnings("error")
 np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
-
 
 class Colony:
     """
@@ -114,7 +114,13 @@ class Colony:
                 )
 
         self.foragers = [
-            Ant(ant_id=i + 1, logger=self.logger, sense_range=np.random.uniform(low=0.1, high=0.9), colony_id=self.id, log_dir=self.log_dir)
+            Ant(
+                ant_id=i + 1,
+                logger=self.logger,
+                sense_range=np.random.uniform(low=0.1, high=0.9),
+                colony_id=self.id,
+                log_dir=self.log_dir,
+            )
             for i in range(self.num_ants)
         ]
         self.best_rnns = []
@@ -167,10 +173,11 @@ class Colony:
         """
         Letting ants forage to create paths to create RNN
         """
+
         def ant_thread_work(ant, space):
             ant.reset()
             ant.forage(space)
-            
+
         threads = []
         for ant in self.foragers:
             threads.append(th.Thread(target=ant_thread_work, args=(ant, self.space)))
@@ -332,7 +339,13 @@ class Colony:
                 next_link = np.random.choice(out_links, 1, p=norm_pheromones)[0]
                 cur_pnt = next_link.out_node
                 paths[a].append(cur_pnt)
-        return RNN(paths=paths, centeroids_clusters=None, lags=self.space_lags, loss_fun=self.loss_fun, act_fun=self.act_fun)
+        return RNN(
+            paths=paths,
+            centeroids_clusters=None,
+            lags=self.space_lags,
+            loss_fun=self.loss_fun,
+            act_fun=self.act_fun,
+        )
 
     def create_nn_cants(
         self,
@@ -345,7 +358,7 @@ class Colony:
         points = []
         for ant in self.foragers:
             for p in ant.path:
-                if p.type not in [0,2]:
+                if p.type not in [0, 2]:
                     points.append(p)
         points_vertecies = np.array(
             [[p.pos_x, p.pos_y, p.pos_l, p.pos_w] for p in points]
@@ -365,7 +378,7 @@ class Colony:
         for i, ant in enumerate(self.foragers):
             prev_pnt = ant.path[0]
             for p in ant.path:
-                if p.type in [0,2]:  # checks if the point is for an input or output
+                if p.type in [0, 2]:  # checks if the point is for an input or output
                     condensed_paths[i].append(p)
                     continue
                 label = labels[counter]
@@ -401,9 +414,47 @@ class Colony:
                     f"\t Point id: {pnt.id} Point Type: {pnt.type}  Point Name: {pnt.name} x:{pnt.pos_x:.4f} y:{pnt.pos_y:.4f} l:{pnt.pos_l} w:{pnt.pos_w:.4f}"
                 )
         self.logger.info(f"COLONY({self.id}):: Finished building RNN from Ants' paths")
+        # self.animate(condensed_paths)
         return RNN(
-            paths=condensed_paths, centeroids_clusters=clusters, lags=self.space_lags, loss_fun=self.loss_fun
+            paths=condensed_paths,
+            centeroids_clusters=clusters,
+            lags=self.space_lags,
+            loss_fun=self.loss_fun,
         )
+
+    def animate(self, ants_paths) -> None:
+        """
+        Plot CANTS search space
+        """
+        points = []
+        for level, in_space in enumerate(self.space.inputs_space.inputs_spaces.values()):
+            for pnt in in_space.points:
+                points.append([pnt.pos_x, pnt.pos_y, pnt.pos_l, pnt.pheromone])
+        for pnt in self.space.output_space.points:
+            points.append([pnt.pos_x, pnt.pos_y, pnt.pos_l, pnt.pheromone])
+        for pnt in self.space.all_points.values():
+            points.append([pnt.pos_x, pnt.pos_y, pnt.pos_l, pnt.pheromone])
+
+        import matplotlib.pyplot as plt
+        points = np.array(points)
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(points[:,0], points[:,1], points[:,2], s=points[:,3]*10, c=points[:,3], cmap='copper')
+        for path in ants_paths:
+            pnts = []
+            for pnt in path[:-1]:
+                pnts.append([pnt.pos_x, pnt.pos_y, pnt.pos_l])
+            pnts.append([path[-1].pos_x, path[-1].pos_y, self.space.time_lags])
+            pnts = np.array(pnts)
+            plt.plot(pnts[:,0], pnts[:,1], pnts[:,2])
+                
+
+        plt.show(block=False)
+        plt.pause(0.001)
+        plt.close()
+        plt.cla()
+        plt.clf()
+
 
     def insert_rnn(self, rnn: RNN) -> None:
         """
@@ -420,9 +471,8 @@ class Colony:
                 )  # TODO Put the other pheromone update options
         self.best_rnns = sorted(self.best_rnns, key=lambda r: r[0])
         self.space.evaporate_pheromone()
-        print ("FITNESS", rnn.fitness)
         self.logger.info(
-            f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.5f} (Best RNN Fitness: {self.best_rnns[0][0]:.5f})"
+            f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.7f} (Best RNN Fitness: {self.best_rnns[0][0]:.7f})"
         )
 
     def evaluate_rnn(self, rnn: RNN) -> None:
@@ -436,10 +486,16 @@ class Colony:
             self.logger.info(
                 f"\tCOLONY({self.id}):: Using BP, (number of Epochs: {self.num_epochs})"
             )
-            for i in tqdm(range(self.num_epochs)):
-                rnn.do_epoch(self.data.train_input, self.data.train_output, do_feedbck=self.use_bp)
+            for _ in tqdm(range(self.num_epochs), colour='green'):
+                rnn.do_epoch(
+                    self.data.train_input,
+                    self.data.train_output,
+                    do_feedbck=self.use_bp,
+                )
         else:
-            rnn.do_epoch(self.data.train_input, self.data.train_output, do_feedbck=self.use_bp)
+            rnn.do_epoch(
+                self.data.train_input, self.data.train_output, do_feedbck=self.use_bp
+            )
         self.logger.info(f"COLONY({self.id}):: \t finished training")
 
         self.logger.info(f"COLONY({self.id}):: \t starting RNN evaluation")
@@ -450,6 +506,9 @@ class Colony:
         return rnn
 
     def thread_controller(self, total_marchs, num_threads: int):
+        """
+        function to control threads for BP CATNS and ANTS
+        """
         if self.use_cants:
             logger.info("COLONY({self.id}):: Starting 3D CANTS (with threading)")
         else:
@@ -478,7 +537,7 @@ class Colony:
 
         march = 0
         threads = []
-        for i in range(min(total_marchs, num_threads)):
+        for _ in range(min(total_marchs, num_threads)):
             rnn = prepare_rnn()
             threads.append(
                 {"thread": th.Thread(target=thread_worker, args=(rnn,)), "rnn": rnn}
@@ -509,14 +568,15 @@ class Colony:
 
     def live(self, total_marchs) -> None:
         """
-        Do one colony foraging step
+        Do colony foraging
         """
+        start_time = time()
         if self.num_threads != 0:
             self.thread_controller(total_marchs, self.num_threads)
         else:
             logger.info("COLONY({self.id}):: Starting BP-free 4D CANTS")
             self.num_epochs = 1
-            for march_num in tqdm(range(total_marchs)):
+            for march_num in tqdm(range(total_marchs, colour="red")):
                 self.logger.info(
                     f"Colony({self.id}): Iteration {march_num}/{total_marchs}"
                 )
@@ -527,14 +587,88 @@ class Colony:
                     ant.evolve_behavior()
                 self.insert_rnn(rnn)
             self.num_epochs = 1
+        end_time = time() - start_time 
+        logger.info(f"Elapsed Time: {end_time}")
+
+        if self.use_cants:
+            colony.use_bp = True
+            colony.num_epochs = 1000
+            colony.evaluate_rnn(colony.best_rnns[0][1])
+
+    def live_mpi(self, total_marchs) -> None:
+        """
+        Do colony forging with mpi
+        """
+        from mpi4py import MPI
+        mpi_comm = MPI.COMM_WORLD
+        mpi_size = mpi_comm.Get_size()
+        rank = mpi_comm.Get_rank()
+        
+        def worker():
+            while True:
+                self.logger.debug(f"Worker({rank}) is waiting msg")
+                stop = mpi_comm.recv(source=0)
+                self.logger.debug(f"Worker({rank}) recieved a msg")
+                if stop: break
+                rnn = self.create_nn_cants()
+                rnn = self.evaluate_rnn(rnn)
+                for ant in self.foragers:
+                    ant.update_best_behaviors(rnn.fitness)
+                    ant.evolve_behavior()
+                self.logger.debug(f"Worker({rank}) sending a msg")
+                mpi_comm.send(rnn, dest=0)
+                self.logger.debug(f"Worker({rank}) sent a msg")
+        def main():
+            status = MPI.Status()
+            for worker in (range(1, mpi_size)):
+                self.logger.debug(f"Main sending to Worker: {worker}")
+                mpi_comm.send(False, dest=worker)
+                self.logger.debug(f"Main send to Worker:{worker}")
+            for march_num in tqdm(range(total_marchs - (mpi_size - 1)), colour="red", desc="Counting Marchs..."):
+                self.logger.info(
+                    f"Colony({self.id}): Iteration {march_num}/{total_marchs}"
+                )
+                self.logger.debug("Main waiting for Worker Response")
+                rnn = mpi_comm.recv(status=status)
+                self.logger.debug(f"Main Received from Worker: {status.Get_source()}")
+                self.insert_rnn(rnn)
+                mpi_comm.send(False, dest=status.Get_source())
+            for worker in tqdm(range(1, mpi_size), colour="red", desc=f"Counting Last {mpi_size -1} Marchs..."):
+                self.insert_rnn(mpi_comm.recv(status=status))
+                mpi_comm.send(True, dest=status.Get_source())
+
+        if rank == 0:
+            start_time = time()
+            main()
+            end_time = time() - start_time 
+            logger.info(f"Elapsed Time: {end_time}")
+
+            """
+            Train only the best rnn with BP
+            """
+            colony.use_bp = True
+            colony.num_epochs = 1000
+            colony.evaluate_rnn(colony.best_rnns[0][1])
+
+        else:
+            worker()
 
 
 if __name__ == "__main__":
 
     args = Args_Parser(sys.argv)
 
+    logger_format = (
+    "\n<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+    "{extra[ip]} {extra[user]} - <level>{message}</level>"
+    )
+    logger.configure(extra={"ip": "", "user": ""})  # Default values
+
     logger.remove()
-    logger.add(sys.stderr, level=args.term_log_level)
+    # logger.add(sys.stdout, level=args.term_log_level)
+    logger.add(sys.stdout, format=logger_format, level=args.term_log_level)
 
     data = Timeseries(
         data_files=args.data_files,
@@ -564,13 +698,12 @@ if __name__ == "__main__":
         num_threads=args.num_threads,
         ants_mortality=0.1,
         use_cants=args.use_cants,
-        loss_fun = args.loss_fun,
-        act_fun = args.act_fun,
+        loss_fun=args.loss_fun,
+        act_fun=args.act_fun,
     )
 
-    colony.live(args.living_time)
+    if args.num_threads!=0: 
+        colony.live(args.living_time)
+    else:
+        colony.live_mpi(args.living_time)
 
-    if args.use_cants:
-        colony.use_bp = True
-        colony.num_epochs = 2
-        colony.evaluate_rnn(colony.best_rnns[0][1])

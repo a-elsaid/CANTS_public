@@ -18,7 +18,7 @@ def train_single_rnn(num_epochs, lags, data, hidden_layers, hidden_nodes=None) -
         hid_layers=hidden_layers,
         hid_nodes=len(data.input_names),
     )
-    logger.info(f"Single RNN:: Staring Single Fully Connected RNN Training/Testing")
+    logger.info("Single RNN:: Staring Single Fully Connected RNN Training/Testing")
     for i in tqdm(range(num_epochs)):
         rnn.do_epoch(data.train_input, data.train_output)
         if i % 5 == 0:

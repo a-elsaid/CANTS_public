@@ -21,7 +21,7 @@ class Timeseries:
         self.file_names = [x.strip() for x in data_files.split(" ")]
         self.load_data_from_files(self.input_names, self.output_names)
         input_padding = np.zeros((time_lag, len(self.input_names)), dtype=np.float32)
-        norm_fun = self.normalization("minmax")
+        norm_fun = self.normalization("none")
         self.input_data = np.array(norm_fun(self.input_data))
         if future_time != 0:
             self.input_data = self.input_data[:-future_time]
@@ -38,6 +38,7 @@ class Timeseries:
         normalization_types = {
             "minmax": self.min_max_normalize,
             "mean_std": self.mean_normalize,
+            "none": self.none_normalize,
         }
         logger.info(f"using {norm_type.upper()} Normalization")
         return normalization_types[norm_type]
@@ -46,8 +47,8 @@ class Timeseries:
         logger.info(f"loading data from {self.file_names[0]}")
         self.input_data, self.output_data = self.load_data(
             "/".join([self.data_dir, self.file_names[0]]),
-            self.input_names,
-            self.output_names,
+            input_names,
+            output_names,
         )
         if len(self.file_names) > 1:
             for name in self.file_names[1:]:
@@ -66,6 +67,9 @@ class Timeseries:
         data = pd.read_csv(file_name, sep=",", skipinitialspace=True, dtype=np.float32)
         return data[in_params], data[out_params]
 
+    def none_normalize(self, data):
+        return data
+
     def mean_normalize(self, data):
         return (data - data.mean()) / data.std()
 
@@ -75,5 +79,5 @@ class Timeseries:
             max_ = data[x].max()
             if min_ == max_:
                 min_ = 0.0
-            data[x] =  (data[x] - min_)/(max_ - min_)
+            data[x] = (data[x] - min_) / (max_ - min_)
         return data

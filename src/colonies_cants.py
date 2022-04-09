@@ -125,5 +125,7 @@ best_rnn_colony.use_bp = True
 best_rnn_colony.evaluate_rnn(best_rnn_colony.best_rnns[0][1])
 
 
-with open("{}/{}_best_rnn.nn".format(args.out_dir, args.log_file_name), "bw") as file_obj:
+with open(
+    "{}/{}_best_rnn.nn".format(args.out_dir, args.log_file_name), "bw"
+) as file_obj:
     pickle.dump(best_rnn_colony.best_rnns[0][1], file_obj)
