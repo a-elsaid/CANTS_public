@@ -55,7 +55,7 @@ class RNNSearchSpaceCANTS:
             self.all_points.pop(pnt.id)
             self.evaporated_points=+1
             if self.evaporated_points > 250:
-                new_all_points = {k,v for k,v in self.all_points.items()}
+                new_all_points = {k:v for k,v in self.all_points.items()}
                 self.all_points = new_all_points
                 self.evaporated_points = 0
 
