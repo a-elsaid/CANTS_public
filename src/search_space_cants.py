@@ -29,6 +29,7 @@ class RNNSearchSpaceCANTS:
         self.evaporation_rate = evaporation_rate
         self.max_pheromone = max_pheromone
         self.min_pheromone = min_pheromone
+        self.evaporated_points = 0
 
         self.inputs_space = self.Inputs_Space(
             self.logger,
@@ -52,6 +53,12 @@ class RNNSearchSpaceCANTS:
                 points_to_be_removed.append(point)
         for pnt in points_to_be_removed:
             self.all_points.pop(pnt.id)
+            self.evaporated_points=+1
+            if self.evaporated_points > 250:
+                new_all_points = {k,v for k,v in self.all_points.items()}
+                self.all_points = new_all_points
+                self.evaporated_points = 0
+
 
     class Point:
         counter = 0
