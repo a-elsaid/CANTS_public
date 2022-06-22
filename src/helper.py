@@ -253,9 +253,9 @@ class Args_Parser:
         if not os.path.exists(self.data_dir):
             logger.error(f"Data folder ({self.data_dir})does not exit")
         if not os.path.exists(self.log_dir):
-            os.makedirs(self.log_dir, exist_ok = True)
+            os.makedirs(self.log_dir, exist_ok=True)
         if not os.path.exists(self.out_dir):
-            os.makedirs(self.out_dir, exist_ok = True)
+            os.makedirs(self.out_dir, exist_ok=True)
 
     def print_info(
         self,

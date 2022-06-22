@@ -29,6 +29,7 @@ from helper import Args_Parser
 warnings.filterwarnings("error")
 np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
 
+
 class Colony:
     """
     Ants Colony
@@ -246,6 +247,8 @@ class Colony:
                     point.pheromone + pheromone_increment, self.max_pheromone
                 )
 
+                """
+                """
                 # calculate distance between the centeroid and cluster points
                 cluster_distances = self.calcualte_distance_ceteroid_cluster(
                     point, rnn.centeroids_clusters[point.id]
@@ -427,7 +430,7 @@ class Colony:
         Plot CANTS search space
         """
         points = []
-        for level, in_space in enumerate(self.space.inputs_space.inputs_spaces.values()):
+        for level, in_space in enumerate(self.space.inputs_space.inputs_space.values()):
             for pnt in in_space.points:
                 points.append([pnt.pos_x, pnt.pos_y, pnt.pos_l, pnt.pheromone])
         for pnt in self.space.output_space.points:
@@ -436,25 +439,31 @@ class Colony:
             points.append([pnt.pos_x, pnt.pos_y, pnt.pos_l, pnt.pheromone])
 
         import matplotlib.pyplot as plt
+
         points = np.array(points)
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(points[:,0], points[:,1], points[:,2], s=points[:,3]*10, c=points[:,3], cmap='copper')
+        ax = fig.add_subplot(111, projection="3d")
+        ax.scatter(
+            points[:, 0],
+            points[:, 1],
+            points[:, 2],
+            s=points[:, 3] * 10,
+            c=points[:, 3],
+            cmap="copper",
+        )
         for path in ants_paths:
             pnts = []
             for pnt in path[:-1]:
                 pnts.append([pnt.pos_x, pnt.pos_y, pnt.pos_l])
             pnts.append([path[-1].pos_x, path[-1].pos_y, self.space.time_lags])
             pnts = np.array(pnts)
-            plt.plot(pnts[:,0], pnts[:,1], pnts[:,2])
-                
+            plt.plot(pnts[:, 0], pnts[:, 1], pnts[:, 2])
 
         plt.show(block=False)
         plt.pause(0.001)
         plt.close()
         plt.cla()
         plt.clf()
-
 
     def insert_rnn(self, rnn: RNN) -> None:
         """
@@ -486,7 +495,7 @@ class Colony:
             self.logger.info(
                 f"\tCOLONY({self.id}):: Using BP, (number of Epochs: {self.num_epochs})"
             )
-            for _ in tqdm(range(self.num_epochs), colour='green'):
+            for _ in tqdm(range(self.num_epochs), colour="green"):
                 rnn.do_epoch(
                     self.data.train_input,
                     self.data.train_output,
@@ -587,7 +596,7 @@ class Colony:
                     ant.evolve_behavior()
                 self.insert_rnn(rnn)
             self.num_epochs = 1
-        end_time = time() - start_time 
+        end_time = time() - start_time
         logger.info(f"Elapsed Time: {end_time}")
 
         if self.use_cants:
@@ -600,47 +609,98 @@ class Colony:
         Do colony forging with mpi
         """
         from mpi4py import MPI
+
         mpi_comm = MPI.COMM_WORLD
         mpi_size = mpi_comm.Get_size()
         rank = mpi_comm.Get_rank()
-        
+
         def worker():
             while True:
                 self.logger.debug(f"Worker({rank}) is waiting msg")
-                stop = mpi_comm.recv(source=0)
+                (
+                    stop,
+                    self.space.all_points,
+                    self.space.inputs_space,
+                    self.space.output_space,
+                ) = mpi_comm.recv(source=0)
                 self.logger.debug(f"Worker({rank}) recieved a msg")
-                if stop: break
+                if stop:
+                    break
                 rnn = self.create_nn_cants()
                 rnn = self.evaluate_rnn(rnn)
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()
                 self.logger.debug(f"Worker({rank}) sending a msg")
-                mpi_comm.send(rnn, dest=0)
+                mpi_comm.send(
+                    [
+                        rnn,
+                        self.space.all_points,
+                        self.space.inputs_space,
+                        self.space.output_space,
+                    ],
+                    dest=0,
+                )
                 self.logger.debug(f"Worker({rank}) sent a msg")
+
         def main():
             status = MPI.Status()
-            for worker in (range(1, mpi_size)):
+            for worker in range(1, mpi_size):
                 self.logger.debug(f"Main sending to Worker: {worker}")
-                mpi_comm.send(False, dest=worker)
+                mpi_comm.send(
+                    [
+                        False,
+                        self.space.all_points,
+                        self.space.inputs_space,
+                        self.space.output_space,
+                    ],
+                    dest=worker,
+                )
                 self.logger.debug(f"Main send to Worker:{worker}")
-            for march_num in tqdm(range(total_marchs - (mpi_size - 1)), colour="red", desc="Counting Marchs..."):
+            for march_num in tqdm(
+                range(total_marchs - (mpi_size - 1)),
+                colour="red",
+                desc="Counting Marchs...",
+            ):
                 self.logger.info(
                     f"Colony({self.id}): Iteration {march_num}/{total_marchs}"
                 )
                 self.logger.debug("Main waiting for Worker Response")
-                rnn = mpi_comm.recv(status=status)
+                (
+                    rnn,
+                    self.space.all_points,
+                    self.space.inputs_space,
+                    self.space.output_space,
+                ) = mpi_comm.recv(status=status)
                 self.logger.debug(f"Main Received from Worker: {status.Get_source()}")
                 self.insert_rnn(rnn)
-                mpi_comm.send(False, dest=status.Get_source())
-            for worker in tqdm(range(1, mpi_size), colour="red", desc=f"Counting Last {mpi_size -1} Marchs..."):
-                self.insert_rnn(mpi_comm.recv(status=status))
-                mpi_comm.send(True, dest=status.Get_source())
+                mpi_comm.send(
+                    [
+                        False,
+                        self.space.all_points,
+                        self.space.inputs_space,
+                        self.space.output_space,
+                    ],
+                    dest=status.Get_source(),
+                )
+            for worker in tqdm(
+                range(1, mpi_size),
+                colour="red",
+                desc=f"Counting Last {mpi_size -1} Marchs...",
+            ):
+                (
+                    rnn,
+                    self.space,
+                    self.space.inputs_space,
+                    self.space.output_space,
+                ) = mpi_comm.recv(status=status)
+                self.insert_rnn(rnn)
+                mpi_comm.send([True, None], dest=status.Get_source())
 
         if rank == 0:
             start_time = time()
             main()
-            end_time = time() - start_time 
+            end_time = time() - start_time
             logger.info(f"Elapsed Time: {end_time}")
 
             """
@@ -659,10 +719,10 @@ if __name__ == "__main__":
     args = Args_Parser(sys.argv)
 
     logger_format = (
-    "\n<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-    "<level>{level: <8}</level> | "
-    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-    "{extra[ip]} {extra[user]} - <level>{message}</level>"
+        "\n<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+        "{extra[ip]} {extra[user]} - <level>{message}</level>"
     )
     logger.configure(extra={"ip": "", "user": ""})  # Default values
 
@@ -702,8 +762,7 @@ if __name__ == "__main__":
         act_fun=args.act_fun,
     )
 
-    if args.num_threads!=0: 
+    if args.num_threads != 0:
         colony.live(args.living_time)
     else:
         colony.live_mpi(args.living_time)
-

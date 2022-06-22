@@ -411,6 +411,8 @@ class Colony:
                     f"\t Point id: {pnt.id} Point Type: {pnt.type}  Point Name: {pnt.name} x:{pnt.pos_x:.4f} y:{pnt.pos_y:.4f} l:{pnt.pos_l} w:{pnt.pos_w:.4f}"
                 )
         self.logger.info(f"COLONY({self.id}):: Finished building RNN from Ants' paths")
+        print("========>>>>> SIZE OF SPACE:", sys.getsizeof(self.space))
+        input("PRESS ENTER")
         return RNN(
             paths=condensed_paths, centeroids_clusters=clusters, lags=self.space_lags
         )

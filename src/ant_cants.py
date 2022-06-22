@@ -174,7 +174,7 @@ class Ant:
             <= max(
                 self.sense_range
                 - (
-                    self.current_y ** 2 * self.region_move1
+                    self.current_y**2 * self.region_move1
                     + self.current_y * self.region_move2
                 ),  # 2nd degree polynomial to control ant speed based on location
                 0.1,

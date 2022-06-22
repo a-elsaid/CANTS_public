@@ -6,3 +6,4 @@
 logs
 __pycache__
 colony1_space_sample*
+*.ipynb
