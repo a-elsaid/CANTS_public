@@ -566,7 +566,7 @@ if __name__ == "__main__":
     args = Args_Parser(sys.argv)
 
     logger.remove()
-    logger.add(sys.stderr, level=args.term_log_level)
+    logger.add(sys.stdout, level=args.term_log_level)
 
     data_dir = "2018_coal"
     input_params = "Conditioner_Inlet_Temp,Conditioner_Outlet_Temp".replace(",", " ")

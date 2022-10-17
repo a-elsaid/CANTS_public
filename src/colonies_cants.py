@@ -3,6 +3,7 @@ to run the colonies in parallel and evolve them
 using PSO
 """
 import sys
+sys.path.insert(1, "/home/aaevse/loguru")
 import pickle
 import threading as th
 import numpy as np
@@ -12,6 +13,7 @@ from timeseries import Timeseries
 from helper import Args_Parser
 from search_space_cants import RNNSearchSpaceCANTS
 
+
 args = Args_Parser(sys.argv)
 
 NUM_COLONIES = 20
@@ -20,7 +22,7 @@ LIVING_TIME = 1000
 fitness_global = -1
 
 logger.remove()
-logger.add(sys.stderr, level=args.term_log_level)
+logger.add(sys.stdout, level=args.term_log_level)
 logger.add(f"{args.log_dir}/{args.log_file_name}_cants.log", level=args.file_log_level)
 
 colonies = []

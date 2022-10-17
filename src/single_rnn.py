@@ -30,7 +30,7 @@ def train_single_rnn(num_epochs, lags, data, hidden_layers, hidden_nodes=None) -
 if __name__ == "__main__":
     args = Args_Parser(sys.argv)
     logger.remove()
-    logger.add(sys.stderr, level=args.term_log_level)
+    logger.add(sys.stdout, level=args.term_log_level)
     logger.add(
         f"{args.log_dir}/single_rnn_{args.log_file_name}.log",
         level=args.col_log_level,

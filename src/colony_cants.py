@@ -10,6 +10,7 @@ A colony controls:
 also use as a PSO particle to evolve coexisting colonies
 """
 import sys
+sys.path.insert(1, "/home/aaevse/loguru")
 from typing import List
 from time import time
 import warnings
@@ -25,6 +26,7 @@ from ant_cants import Ant
 from rnn import RNN
 from timeseries import Timeseries
 from helper import Args_Parser
+
 
 warnings.filterwarnings("error")
 np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
@@ -626,7 +628,10 @@ class Colony:
                 self.logger.debug(f"Worker({rank}) recieved a msg")
                 if stop:
                     break
-                rnn = self.create_nn_cants()
+                if self.use_cants:
+                    rnn = self.create_nn_cants()
+                else:
+                    rnn = self.create_nn_ants()
                 rnn = self.evaluate_rnn(rnn)
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
@@ -690,14 +695,22 @@ class Colony:
             ):
                 (
                     rnn,
-                    self.space,
+                    self.space.all_points,
                     self.space.inputs_space,
                     self.space.output_space,
                 ) = mpi_comm.recv(status=status)
                 self.insert_rnn(rnn)
-                mpi_comm.send([True, None], dest=status.Get_source())
+                mpi_comm.send([True, None, None, None], dest=status.Get_source())
 
         if rank == 0:
+            if colony.use_cants:
+                if colony.use_bp:
+                    logger.info("COLONY({self.id}):: Starting 3D CANTS With-BP")
+                else:
+                    logger.info("COLONY({self.id}):: Starting 4D CANTS BP-Free")
+            else:
+                logger.info("COLONY({self.id}):: Starting ANTS")
+
             start_time = time()
             main()
             end_time = time() - start_time
@@ -705,10 +718,12 @@ class Colony:
 
             """
             Train only the best rnn with BP
+            (ONLY FOR BP-FREE CANTS)
             """
-            colony.use_bp = True
-            colony.num_epochs = 1000
-            colony.evaluate_rnn(colony.best_rnns[0][1])
+            if colony.use_cants and colony.use_bp:
+                colony.use_bp = True
+                colony.num_epochs = 1000
+                colony.evaluate_rnn(colony.best_rnns[0][1])
 
         else:
             worker()

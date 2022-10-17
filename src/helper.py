@@ -81,7 +81,7 @@ class Args_Parser:
         self.log_dir = "logs"
         self.use_cants = False
         self.use_bp = False
-        self.bp_epochs = 0
+        self.bp_epochs = 1
         self.num_ants = 10
         self.max_pheromone = 10
         self.min_pheromone = 0.5
