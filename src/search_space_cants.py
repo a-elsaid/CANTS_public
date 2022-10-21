@@ -89,7 +89,9 @@ class RNNSearchSpaceCANTS:
             self,
         ) -> None:
             print(
-                f"Pos X: {self.pos_x}, Pos Y: {self.pos_y}, Pos L: {self.pos_l}, Weight: {self.pos_w}, Type: {self.type}, Name: {self.name}, In_No: {self.inout_num}"
+                f"Pos X: {self.pos_x}, Pos Y: {self.pos_y}, Pos L: {self.pos_l}, " +
+                f"Weight: {self.pos_w}, Type: {self.type}, Name: {self.name}, " +
+                f"In_No: {self.inout_num}"
             )
 
     class Single_Input_Space:

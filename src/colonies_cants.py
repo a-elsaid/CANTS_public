@@ -3,7 +3,7 @@ to run the colonies in parallel and evolve them
 using PSO
 """
 import sys
-sys.path.insert(1, "/home/aaevse/loguru")
+
 import pickle
 import threading as th
 import numpy as np
@@ -13,6 +13,7 @@ from timeseries import Timeseries
 from helper import Args_Parser
 from search_space_cants import RNNSearchSpaceCANTS
 
+sys.path.insert(1, "/home/aaevse/loguru")
 
 args = Args_Parser(sys.argv)
 
@@ -75,7 +76,8 @@ def living_colony(colony: Colony, forages: int):
 intervals = args.communication_intervals
 if intervals > args.living_time + 1:
     logger.error(
-        f"Colonies evolution intervals ({intervals}) less than the total number of iterations ({args.living_time+1})"
+        f"Colonies evolution intervals ({intervals}) less" +
+        f"than the total number of iterations ({args.living_time+1})"
     )
     sys.exit()
 for tim in range(intervals, args.living_time + 1, intervals):

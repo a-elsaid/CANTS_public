@@ -10,7 +10,6 @@ A colony controls:
 also use as a PSO particle to evolve coexisting colonies
 """
 import sys
-sys.path.insert(1, "/home/aaevse/loguru")
 from typing import List
 from time import time
 import warnings
@@ -27,6 +26,7 @@ from rnn import RNN
 from timeseries import Timeseries
 from helper import Args_Parser
 
+sys.path.insert(1, "/home/aaevse/loguru")
 
 warnings.filterwarnings("error")
 np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
@@ -391,10 +391,14 @@ class Colony:
                 if label != -1:  # not single point cluster
                     p = centeroids[label]
 
+                """
+                skip point if same-level and before prev_point
+                or centroid is same as anther point in path
+                """
                 if (p.pos_l <= prev_pnt.pos_l and p.pos_y < prev_pnt.pos_y) or (
                     p in condensed_paths[i]
                 ):
-                    continue  # skip point if same-level and before prev_point or centroid is same as anther point in path
+                    continue
 
                 condensed_paths[i].append(p)
                 prev_pnt = condensed_paths[i][-1]
@@ -416,7 +420,9 @@ class Colony:
             self.logger.debug(f"Path {i}")
             for pnt in path:
                 self.logger.debug(
-                    f"\t Point id: {pnt.id} Point Type: {pnt.type}  Point Name: {pnt.name} x:{pnt.pos_x:.4f} y:{pnt.pos_y:.4f} l:{pnt.pos_l} w:{pnt.pos_w:.4f}"
+                    f"\t Point id: {pnt.id} Point Type: {pnt.type} " +
+                    f"Point Name: {pnt.name} x:{pnt.pos_x:.4f} " +
+                    f" y:{pnt.pos_y:.4f} l:{pnt.pos_l} w:{pnt.pos_w:.4f}"
                 )
         self.logger.info(f"COLONY({self.id}):: Finished building RNN from Ants' paths")
         # self.animate(condensed_paths)
@@ -483,7 +489,8 @@ class Colony:
         self.best_rnns = sorted(self.best_rnns, key=lambda r: r[0])
         self.space.evaporate_pheromone()
         self.logger.info(
-            f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.7f} (Best RNN Fitness: {self.best_rnns[0][0]:.7f})"
+            f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.7f} " +
+            f"(Best RNN Fitness: {self.best_rnns[0][0]:.7f})"
         )
 
     def evaluate_rnn(self, rnn: RNN) -> None:
@@ -517,6 +524,8 @@ class Colony:
         return rnn
 
     def thread_controller(self, total_marchs, num_threads: int):
+        from concurrent.futures import ThreadPoolExecutor
+
         """
         function to control threads for BP CATNS and ANTS
         """
@@ -550,16 +559,21 @@ class Colony:
         threads = []
         for _ in range(min(total_marchs, num_threads)):
             rnn = prepare_rnn()
-            threads.append(
-                {"thread": th.Thread(target=thread_worker, args=(rnn,)), "rnn": rnn}
-            )
-            threads[-1]["thread"].start()
+            logger.info(f"THREAD {_}")
+            executor = ThreadPoolExecutor(max_workers=num_threads)
+            feature = executor.submit(thread_worker, rnn)
+            threads.append({"thread": executor, "feature": feature})
+
         turn = True
         while turn:
+            if march == total_marchs:
+                break
+            rnn = prepare_rnn()
             for t in threads:
-                if not t["thread"].is_alive():
-                    process_rnn(t["rnn"])
+                if t["feature"].done():
+                    process_rnn(t["feature"].result())
                     march += 1
+                    logger.info(format(f"March No. {march}", "*^40"))
                     self.logger.info(
                         f"COLONY({self.id}): Interation {march}/{total_marchs}"
                     )
@@ -568,13 +582,9 @@ class Colony:
                         break
                     threads.remove(t)
                     rnn = prepare_rnn()
-                    threads.append(
-                        {
-                            "thread": th.Thread(target=thread_worker, args=(rnn,)),
-                            "rnn": rnn,
-                        }
-                    )
-                    threads[-1]["thread"].start()
+                    executor = ThreadPoolExecutor(max_workers=1)
+                    executor.submit(thread_worker, rnn)
+                    threads.append({"thread": executor, "feature": feature})
                     break
 
     def live(self, total_marchs) -> None:
@@ -652,6 +662,7 @@ class Colony:
             status = MPI.Status()
             for worker in range(1, mpi_size):
                 self.logger.debug(f"Main sending to Worker: {worker}")
+                print(len(self.space.all_points))
                 mpi_comm.send(
                     [
                         False,
@@ -710,6 +721,14 @@ class Colony:
                     logger.info("COLONY({self.id}):: Starting 4D CANTS BP-Free")
             else:
                 logger.info("COLONY({self.id}):: Starting ANTS")
+
+                """
+                Found that sending the massive structure
+                using mpi_comm.send was hitting the max
+                allowed number of recurrsive iterations: 1K
+                """
+                sys.setrecursionlimit(20000)
+                print(sys.getrecursionlimit())
 
             start_time = time()
             main()

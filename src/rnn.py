@@ -73,7 +73,9 @@ class Node:
         logger.debug(f"Node({self.id}) fired: {self.out}")
         for edge in self.fan_out.values():
             logger.debug(
-                f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})"
+                f"\t Node({self.id}) Sent Signal {self.out} * " +
+                f"{edge.weight} ({self.out * edge.weight}) to " +
+                f"Node({edge.out_node.id})"
             )
             edge.out_node.synaptic_signal(self.out * edge.weight)
 
@@ -97,7 +99,8 @@ class Node:
         )
         self.value += signal
         logger.debug(
-            f"Node({self.id}) [Point({self.point.id})] value after received signal: {self.value} -- Waiting {self.waiting_signals} Signals"
+            f"Node({self.id}) [Point({self.point.id})] value after received " +
+            f"signal: {self.value} -- Waiting {self.waiting_signals} Signals"
         )
         self.waiting_signals -= 1
 
@@ -158,7 +161,8 @@ class LSTM_Node(Node):
         """
         for edge in self.fan_out.values():
             logger.debug(
-                f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} ({self.out * edge.weight}) to Node({edge.out_node.id})"
+                f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} " +
+                f"({self.out * edge.weight}) to Node({edge.out_node.id})"
             )
             edge.out_node.synaptic_signal(self.out * edge.weight)
         self.fired = True
@@ -238,7 +242,8 @@ class RNN:
         for node in self.nodes.values():
             node.waiting_signals = node.signals_to_receive
             logger.debug(
-                f"Node({node.id}) Point({node.point.id}) Type: {node.type} WaitingSignals: {node.waiting_signals}"
+                f"Node({node.id}) Point({node.point.id}) Type: {node.type} " +
+                f"WaitingSignals: {node.waiting_signals}"
             )
             for e in node.fan_out.values():
                 logger.debug(f"\t Out Node({e.out_node.id})")
@@ -253,8 +258,8 @@ class RNN:
         self.lags = lags
         Point = RNNSearchSpaceANTS.Point
         for i, name in enumerate(input_names):
-            for l in range(lags):
-                node = LSTM_Node(Point(None, None, 0, name, i), l, self.act_fun)
+            for lag in range(lags):
+                node = LSTM_Node(Point(None, None, 0, name, i), lag, self.act_fun)
                 self.nodes[node.id] = node
                 self.input_nodes.append(node)
 
@@ -267,9 +272,10 @@ class RNN:
         for _ in range(hid_layers):
             curr_layer = []
             for _ in range(hid_nodes):
-                node = LSTM_Node(Point(None, None, 1, None, None), l, self.act_fun)
-                self.nodes[node.id] = node
-                curr_layer.append(node)
+                for lag in range(lags):
+                    node = LSTM_Node(Point(None, None, 1, None, None), lag, self.act_fun)
+                    self.nodes[node.id] = node
+                    curr_layer.append(node)
             for in_node in curr_layer:
                 for out_node in next_layer:
                     in_node.add_fan_out_node(in_node, out_node, np.random.random())
@@ -284,7 +290,8 @@ class RNN:
         for node in self.nodes.values():
             node.waiting_signals = node.signals_to_receive
             logger.debug(
-                f"Node({node.id}): Type: {node.type}  Name: {node.point.name} Point: {node.point.id}"
+                f"Node({node.id}): Type: {node.type}  Name: {node.point.name} " +
+                f"Point: {node.point.id}"
             )
             logger.debug(
                 f"\tOut Nodes: {[edge.out_node.id for edge in node.fan_out.values()]}"

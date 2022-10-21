@@ -261,7 +261,8 @@ class Args_Parser:
         self,
     ):
         print(
-            "To run the program: python <src/colony.py> or <src/colonies.py> and then the following parameters:"
+            "To run the program: python <src/colony.py> or " +
+            "<src/colonies.py> and then the following parameters:"
         )
         print("Data Directory (Required):                   --data_dir or -d")
         print("Log Directory (Defualt=./):                  --log_dir or -x")
@@ -312,6 +313,7 @@ class Args_Parser:
             "Loss Function (Defualt=mse [mse, mae]):                  --loss_fun or -lf"
         )
         print(
-            "Activation Function (Defualt=sigmoid [sigmoid, relu, tanh, softmax, leaky_relu]):   --act_fun or -af"
+            "Activation Function (Defualt=sigmoid [sigmoid, relu, tanh, softmax, leaky_relu]):" +
+            "--act_fun or -af"
         )
         sys.exit()

@@ -44,10 +44,10 @@ class RNNSearchSpaceANTS:
         self.output_space = self.Outputs_Space(outs_names)
 
         """Creating Hidden Points"""
-        for l in range(self.time_lags):
+        for lag in range(self.time_lags):
             for h in range(num_hid_layers):
                 for n in range(num_hid_nodes):
-                    pnt = self.Point(lag=l, hid=h, point_type=NODE_TYPE["HIDDEN"])
+                    pnt = self.Point(lag=lag, hid=h, point_type=NODE_TYPE["HIDDEN"])
                     self.all_points[pnt.id] = pnt
 
         """Linking Hidden Points with other Hidden Points and Output Points"""
@@ -137,10 +137,10 @@ class RNNSearchSpaceANTS:
             self.name: str = name
             self.in_num: int = in_num
             self.points: List[RNNSearchSpaceANTS.Point] = []
-            for l in range(lags):
+            for lag in range(lags):
                 self.points.append(
                     RNNSearchSpaceANTS.Point(
-                        lag=l,
+                        lag=lag,
                         point_type=NODE_TYPE["INPUT"],
                         name=name,
                         inout_num=in_num,
