@@ -518,7 +518,7 @@ class Colony:
 
         self.logger.info(f"COLONY({self.id}):: \t starting RNN evaluation")
         rnn.test_rnn(self.data.test_input, self.data.test_output)
-        self.logger.info(f"COLONY({self.id}):: \t finished RNN evaluation")
+        self.logger.info(f"COLONY({self.id}):: \t finished RNN evaluation... Testing Fitness: {rnn.fitness}")
 
         self.logger.info(f"COLONY({self.id}):: Finished RNN Colony Evaluation")
         return rnn
