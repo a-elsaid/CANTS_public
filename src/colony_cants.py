@@ -739,7 +739,7 @@ class Colony:
             Train only the best rnn with BP
             (ONLY FOR BP-FREE CANTS)
             """
-            if colony.use_cants and colony.use_bp:
+            if colony.use_cants and not colony.use_bp:
                 colony.use_bp = True
                 colony.num_epochs = 1000
                 colony.evaluate_rnn(colony.best_rnns[0][1])
