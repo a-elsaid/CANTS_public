@@ -348,6 +348,7 @@ class RNN:
                 self.feedbackward(err)
             for node in self.nodes.values():
                 node.reset_node()
+
         self.total_err /= i
         logger.info(f"Training Epoch average Total Error: {self.total_err}")
 

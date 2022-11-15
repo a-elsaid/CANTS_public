@@ -483,9 +483,9 @@ class Colony:
             if self.best_rnns[-1][0] > rnn.fitness:
                 self.best_rnns[-1] = [rnn.fitness, rnn]
                 self.update_search_space_weights(rnn)
-                self.update_pheromone_const(
-                    rnn
-                )  # TODO Put the other pheromone update options
+                self.update_pheromone_const(rnn)
+                # TODO Put the other pheromone update options
+
         self.best_rnns = sorted(self.best_rnns, key=lambda r: r[0])
         self.space.evaporate_pheromone()
         self.logger.info(
@@ -587,7 +587,7 @@ class Colony:
                     threads.append({"thread": executor, "feature": feature})
                     break
 
-    def live(self, total_marchs) -> None:
+    def life(self, total_marchs) -> None:
         """
         Do colony foraging
         """
@@ -616,7 +616,7 @@ class Colony:
             colony.num_epochs = 1000
             colony.evaluate_rnn(colony.best_rnns[0][1])
 
-    def live_mpi(self, total_marchs) -> None:
+    def life_mpi(self, total_marchs) -> None:
         """
         Do colony forging with mpi
         """
@@ -662,7 +662,6 @@ class Colony:
             status = MPI.Status()
             for worker in range(1, mpi_size):
                 self.logger.debug(f"Main sending to Worker: {worker}")
-                print(len(self.space.all_points))
                 mpi_comm.send(
                     [
                         False,
@@ -728,7 +727,7 @@ class Colony:
                 allowed number of recurrsive iterations: 1K
                 """
                 sys.setrecursionlimit(20000)
-                print(sys.getrecursionlimit())
+                logger.info(f"Using the total numbe of threads: {sys.getrecursionlimit()}")
 
             start_time = time()
             main()
@@ -797,6 +796,6 @@ if __name__ == "__main__":
     )
 
     if args.num_threads != 0:
-        colony.live(args.living_time)
+        colony.life(args.living_time)
     else:
-        colony.live_mpi(args.living_time)
+        colony.life_mpi(args.living_time)
