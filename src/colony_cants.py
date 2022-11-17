@@ -25,6 +25,10 @@ from ant_cants import Ant
 from rnn import RNN
 from timeseries import Timeseries
 from helper import Args_Parser
+from datetime import datetime
+import pickle
+
+now = datetime.now()
 
 sys.path.insert(1, "/home/aaevse/loguru")
 
@@ -477,6 +481,7 @@ class Colony:
         """
         inserts rnn to the population and sorts based on rnns fitnesses
         """
+        inserted_rnn = False
         if len(self.best_rnns) < self.best_population_size:
             self.best_rnns.append([rnn.fitness, rnn])
         else:
@@ -484,6 +489,7 @@ class Colony:
                 self.best_rnns[-1] = [rnn.fitness, rnn]
                 self.update_search_space_weights(rnn)
                 self.update_pheromone_const(rnn)
+                inserted_rnn = True
                 # TODO Put the other pheromone update options
 
         self.best_rnns = sorted(self.best_rnns, key=lambda r: r[0])
@@ -492,6 +498,7 @@ class Colony:
             f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.7f} " +
             f"(Best RNN Fitness: {self.best_rnns[0][0]:.7f})"
         )
+        return inserted_rnn
 
     def evaluate_rnn(self, rnn: RNN) -> None:
         """
@@ -504,7 +511,9 @@ class Colony:
             self.logger.info(
                 f"\tCOLONY({self.id}):: Using BP, (number of Epochs: {self.num_epochs})"
             )
-            for _ in tqdm(range(self.num_epochs), colour="green"):
+            # for _ in tqdm(range(self.num_epochs), colour="green"):
+            for k in range(self.num_epochs):
+                logger.info(f"Evalutating RNN {k}/{self.num_epochs}")
                 rnn.do_epoch(
                     self.data.train_input,
                     self.data.train_output,
@@ -587,6 +596,20 @@ class Colony:
                     threads.append({"thread": executor, "feature": feature})
                     break
 
+    def save_result_to_file(self, stime: float, fitness: float):
+        time_stamp = now.strftime('%d_%m_%Y_%H_%M_%S')
+        bp = ("bp" if self.use_bp else "wzbp")
+        cants = ("CANTS" if self.use_cants else "ANTS")
+        with open("/".join([self.out_dir, f"nants{self.num_ants}_{bp}_{cants}.res"]), 'a') as fl:
+            fl.write("{}, {}, {}\n".format(time_stamp, stime, fitness))
+
+    def save_rnn(self, rnn: RNN, iteration = ""):
+        bp = ("bp" if self.use_bp else "wzbp")
+        cants = ("CANTS" if self.use_cants else "ANTS")
+        time_stamp = now.strftime('%Y_%m_%d_%H_%M_%S')
+        with open("/".join([self.out_dir, f"{iteration}_{time_stamp}_nants{self.num_ants}_{bp}_{cants}.rnn"]), 'wb') as fl:
+            pickle.dump(rnn, fl) 
+
     def life(self, total_marchs) -> None:
         """
         Do colony foraging
@@ -597,7 +620,8 @@ class Colony:
         else:
             logger.info("COLONY({self.id}):: Starting BP-free 4D CANTS")
             self.num_epochs = 1
-            for march_num in tqdm(range(total_marchs, colour="red")):
+            # for march_num in tqdm(range(total_marchs, colour="red")):
+            for march_num in range(total_marchs):
                 self.logger.info(
                     f"Colony({self.id}): Iteration {march_num}/{total_marchs}"
                 )
@@ -606,15 +630,25 @@ class Colony:
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()
-                self.insert_rnn(rnn)
-            self.num_epochs = 1
+                inserted_rnn = self.insert_rnn(rnn)
+                if inserted_rnn:
+                    end_time = time() - start_time
+                    self.save_rnn(self.best_rnns[0][1], march_num)
+            #self.num_epochs = 1
+
         end_time = time() - start_time
         logger.info(f"Elapsed Time: {end_time}")
+        self.save_result_to_file(end_time, self.best_rnns[0][0])
+
+
 
         if self.use_cants:
             colony.use_bp = True
             colony.num_epochs = 1000
-            colony.evaluate_rnn(colony.best_rnns[0][1])
+            evaluated_rnn = colony.evaluate_rnn(colony.best_rnns[0][1])
+            self.save_result_to_file(time()-start_time, evaluated_rnn.fitness)
+            self.save_rnn(evaluated_rnn, "-")
+            
 
     def life_mpi(self, total_marchs) -> None:
         """
@@ -672,13 +706,16 @@ class Colony:
                     dest=worker,
                 )
                 self.logger.debug(f"Main send to Worker:{worker}")
+            '''
             for march_num in tqdm(
                 range(total_marchs - (mpi_size - 1)),
                 colour="red",
                 desc="Counting Marchs...",
             ):
+            '''
+            for march_num in range(total_marchs - (mpi_size - 1)):
                 self.logger.info(
-                    f"Colony({self.id}): Iteration {march_num}/{total_marchs}"
+                    f"Main Process: Colony({self.id}): Iteration {march_num}/{total_marchs}"
                 )
                 self.logger.debug("Main waiting for Worker Response")
                 (
@@ -688,7 +725,10 @@ class Colony:
                     self.space.output_space,
                 ) = mpi_comm.recv(status=status)
                 self.logger.debug(f"Main Received from Worker: {status.Get_source()}")
-                self.insert_rnn(rnn)
+                inserted_rnn = self.insert_rnn(rnn)
+                if inserted_rnn:
+                    end_time = time() - start_time
+                    self.save_rnn(self.best_rnns[0][1], march_num)
                 mpi_comm.send(
                     [
                         False,
@@ -698,28 +738,38 @@ class Colony:
                     ],
                     dest=status.Get_source(),
                 )
+            '''
             for worker in tqdm(
                 range(1, mpi_size),
                 colour="red",
                 desc=f"Counting Last {mpi_size -1} Marchs...",
             ):
+            '''
+            for worker in range(1, mpi_size):
+                self.logger.info(
+                    f"Main Process: Colony({self.id}): Iteration {march_num+worker}/{total_marchs}"
+                )
                 (
                     rnn,
                     self.space.all_points,
                     self.space.inputs_space,
                     self.space.output_space,
                 ) = mpi_comm.recv(status=status)
-                self.insert_rnn(rnn)
+                inserted_rnn = self.insert_rnn(rnn)
+                if inserted_rnn:
+                    end_time = time() - start_time
+                    self.save_rnn(self.best_rnns[0][1], worker)
+                
                 mpi_comm.send([True, None, None, None], dest=status.Get_source())
 
         if rank == 0:
             if colony.use_cants:
                 if colony.use_bp:
-                    logger.info("COLONY({self.id}):: Starting 3D CANTS With-BP")
+                    logger.info("Main Process: COLONY({self.id}):: Starting 3D CANTS With-BP")
                 else:
-                    logger.info("COLONY({self.id}):: Starting 4D CANTS BP-Free")
+                    logger.info("Main Process: COLONY({self.id}):: Starting 4D CANTS BP-Free")
             else:
-                logger.info("COLONY({self.id}):: Starting ANTS")
+                logger.info("Main Process: COLONY({self.id}):: Starting ANTS")
 
                 """
                 Found that sending the massive structure
@@ -727,12 +777,13 @@ class Colony:
                 allowed number of recurrsive iterations: 1K
                 """
                 sys.setrecursionlimit(20000)
-                logger.info(f"Using the total numbe of threads: {sys.getrecursionlimit()}")
+                logger.info(f"Main Process: Using the total numbe of threads: {sys.getrecursionlimit()}")
 
             start_time = time()
             main()
             end_time = time() - start_time
             logger.info(f"Elapsed Time: {end_time}")
+            self.save_result_to_file(end_time, self.best_rnns[0][0])
 
             """
             Train only the best rnn with BP
@@ -741,7 +792,9 @@ class Colony:
             if colony.use_cants and not colony.use_bp:
                 colony.use_bp = True
                 colony.num_epochs = 1000
-                colony.evaluate_rnn(colony.best_rnns[0][1])
+                evaluated_rnn = colony.evaluate_rnn(colony.best_rnns[0][1])
+                self.save_result_to_file(time()-start_time, evaluated_rnn.fitness)
+                self.save_rnn(evaluated_rnn, "-")
 
         else:
             worker()

@@ -338,7 +338,8 @@ class RNN:
             loss_fun = self.loss_fun
         self.total_err = 0.0
         err = None
-        for i in tqdm(range(len(inputs) - self.lags)):
+        # for i in tqdm(range(len(inputs) - self.lags)):
+        for i in range(len(inputs) - self.lags):
             res = self.feedforward(inputs[i : i + self.lags])
             logger.debug(f"feedforward return (output nodes values): {res}")
             err = [loss for loss in loss_fun(res, outputs[i])]
