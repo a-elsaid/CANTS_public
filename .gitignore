@@ -7,3 +7,8 @@ logs
 __pycache__
 colony1_space_sample*
 *.ipynb
+LOG*
+OUT*
+*.res
+*.rnn
+*.swp

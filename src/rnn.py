@@ -64,15 +64,15 @@ class Node:
         firing the node when activated
         """
         self.waiting_signals = self.signals_to_receive
-        logger.debug(
+        logger.trace(
             f"Node({self.id}) [Point({self.point.id})] Fired: Sig({self.value} \
             + {self.bias}) = {self.activation(self.value + self.bias)}"
         )
         self.out = self.activation(self.value + self.bias)
         self.fired = True
-        logger.debug(f"Node({self.id}) fired: {self.out}")
+        logger.trace(f"Node({self.id}) fired: {self.out}")
         for edge in self.fan_out.values():
-            logger.debug(
+            logger.trace(
                 f"\t Node({self.id}) Sent Signal {self.out} * " +
                 f"{edge.weight} ({self.out * edge.weight}) to " +
                 f"Node({edge.out_node.id})"
@@ -91,21 +91,21 @@ class Node:
         receiving a synaptic signal and firing when all signals are received
         """
         self.fired = False
-        logger.debug(
+        logger.trace(
             f"Node({self.id}) [Point:{self.point.id}, Type: {self.type}] revieved signal: {signal}"
         )
-        logger.debug(
+        logger.trace(
             f"Node({self.id}) [Point({self.point.id})] value before receiving signal: {self.value}"
         )
         self.value += signal
-        logger.debug(
+        logger.trace(
             f"Node({self.id}) [Point({self.point.id})] value after received " +
             f"signal: {self.value} -- Waiting {self.waiting_signals} Signals"
         )
         self.waiting_signals -= 1
 
         if self.waiting_signals <= 0:
-            logger.debug(f"Node({self.id}) is going to fire: {self.value}")
+            logger.trace(f"Node({self.id}) is going to fire: {self.value}")
             self.fire()
 
 
@@ -154,13 +154,13 @@ class LSTM_Node(Node):
         self.ct = ct.item()
         self.out = ot * self.activation(ct)
         self.ht = self.out.item()
-        logger.debug(f"Node({self.id}) fired: {self.out}")
+        logger.trace(f"Node({self.id}) fired: {self.out}")
         """
         if self.out > 2.0:
             ipdb.sset_trace()
         """
         for edge in self.fan_out.values():
-            logger.debug(
+            logger.trace(
                 f"\t Node({self.id}) Sent Signal {self.out} * {edge.weight} " +
                 f"({self.out * edge.weight}) to Node({edge.out_node.id})"
             )
@@ -241,14 +241,14 @@ class RNN:
 
         for node in self.nodes.values():
             node.waiting_signals = node.signals_to_receive
-            logger.debug(
+            logger.trace(
                 f"Node({node.id}) Point({node.point.id}) Type: {node.type} " +
                 f"WaitingSignals: {node.waiting_signals}"
             )
             for e in node.fan_out.values():
-                logger.debug(f"\t Out Node({e.out_node.id})")
+                logger.trace(f"\t Out Node({e.out_node.id})")
             for n in node.fan_in:
-                logger.debug(f"\t In Node({n.id})")
+                logger.trace(f"\t In Node({n.id})")
 
     def build_fully_connected_rnn(
         self, input_names, output_names, lags, hid_layers, hid_nodes
@@ -289,14 +289,14 @@ class RNN:
 
         for node in self.nodes.values():
             node.waiting_signals = node.signals_to_receive
-            logger.debug(
+            logger.trace(
                 f"Node({node.id}): Type: {node.type}  Name: {node.point.name} " +
                 f"Point: {node.point.id}"
             )
-            logger.debug(
+            logger.trace(
                 f"\tOut Nodes: {[edge.out_node.id for edge in node.fan_out.values()]}"
             )
-            logger.debug(f"\tIn Nodes: {[node.id for node in node.fan_in]}")
+            logger.trace(f"\tIn Nodes: {[node.id for node in node.fan_in]}")
 
     def feedforward(
         self,
@@ -341,7 +341,7 @@ class RNN:
         # for i in tqdm(range(len(inputs) - self.lags)):
         for i in range(len(inputs) - self.lags):
             res = self.feedforward(inputs[i : i + self.lags])
-            logger.debug(f"feedforward return (output nodes values): {res}")
+            logger.trace(f"feedforward return (output nodes values): {res}")
             err = [loss for loss in loss_fun(res, outputs[i])]
             err = sum(err) / len(err)
             self.total_err += err
@@ -379,13 +379,13 @@ class RNN:
         with torch.no_grad():
             for node in self.nodes.values():
                 for edge in node.fan_out.values():
-                    logger.debug(
+                    logger.trace(
                         f"From Point {node.point.id} To Point \
                             {edge.out_node.point.id}: dweight = {edge.weight.grad}"
                     )
-                    logger.debug(f"\t Weight before update: {edge.weight}")
+                    logger.trace(f"\t Weight before update: {edge.weight}")
                     edge.weight += edge.weight.grad
-                    logger.debug(f"\t Weight after update: {edge.weight}")
+                    logger.trace(f"\t Weight after update: {edge.weight}")
                     edge.weight.grad.zero_()
                 if isinstance(node, LSTM_Node):
                     node.wf -= node.wf.grad

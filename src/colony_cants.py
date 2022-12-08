@@ -185,17 +185,24 @@ class Colony:
             ant.reset()
             ant.forage(space)
 
-        threads = []
+        # threads = []
         for ant in self.foragers:
-            threads.append(th.Thread(target=ant_thread_work, args=(ant, self.space)))
+            ant.reset()
+            ant.forage(self.space)
+
+        """
+            threads.append(
+                th.Thread(
+                    target=ant_thread_work, args=(ant, self.space))
+            )
             threads[-1].start()
-            # ant.reset()
-            # ant.forage(self.space)
+
         for thread in threads:
             thread.join()
         for ant in self.foragers:
             for pnt in ant.new_points:
                 self.space.all_points[pnt.id] = pnt
+        """
 
     def calcualte_distance_ceteroid_cluster(
         self,
@@ -513,7 +520,7 @@ class Colony:
             )
             # for _ in tqdm(range(self.num_epochs), colour="green"):
             for k in range(self.num_epochs):
-                self.logger.info(f"Evalutating RNN {k}/{self.num_epochs}")
+                logger.info(f"Evalutating RNN {k}/{self.num_epochs}")
                 rnn.do_epoch(
                     self.data.train_input,
                     self.data.train_output,
@@ -539,9 +546,9 @@ class Colony:
         function to control threads for BP CATNS and ANTS
         """
         if self.use_cants:
-            self.logger.info("COLONY({self.id}):: Starting 3D CANTS (with threading)")
+            logger.info("COLONY({self.id}):: Starting 3D CANTS (with threading)")
         else:
-            self.logger.info("COLONY({self.id}):: Starting ANTS (with threading)")
+            logger.info("COLONY({self.id}):: Starting ANTS (with threading)")
 
         def thread_worker(rnn) -> None:
             """
@@ -568,7 +575,7 @@ class Colony:
         threads = []
         for _ in range(min(total_marchs, num_threads)):
             rnn = prepare_rnn()
-            self.logger.info(f"THREAD {_}")
+            logger.info(f"THREAD {_}")
             executor = ThreadPoolExecutor(max_workers=num_threads)
             feature = executor.submit(thread_worker, rnn)
             threads.append({"thread": executor, "feature": feature})
@@ -582,7 +589,7 @@ class Colony:
                 if t["feature"].done():
                     process_rnn(t["feature"].result())
                     march += 1
-                    self.logger.info(format(f"March No. {march}", "*^40"))
+                    logger.info(format(f"March No. {march}", "*^40"))
                     self.logger.info(
                         f"COLONY({self.id}): Interation {march}/{total_marchs}"
                     )
@@ -597,7 +604,7 @@ class Colony:
                     break
 
     def save_result_to_file(self, stime: float, fitness: float):
-        time_stamp = now.strftime('%Y_%m_%d_%H_%M_%S')
+        time_stamp = now.strftime('%d_%m_%Y_%H_%M_%S')
         bp = ("bp" if self.use_bp else "wzbp")
         cants = ("CANTS" if self.use_cants else "ANTS")
         with open("/".join([self.out_dir, f"nants{self.num_ants}_{bp}_{cants}.res"]), 'a') as fl:
@@ -618,7 +625,7 @@ class Colony:
         if self.num_threads != 0:
             self.thread_controller(total_marchs, self.num_threads)
         else:
-            self.logger.info("COLONY({self.id}):: Starting BP-free 4D CANTS")
+            logger.info("COLONY({self.id}):: Starting BP-free 4D CANTS")
             self.num_epochs = 1
             # for march_num in tqdm(range(total_marchs, colour="red")):
             for march_num in range(total_marchs):
@@ -637,7 +644,7 @@ class Colony:
             #self.num_epochs = 1
 
         end_time = time() - start_time
-        self.logger.info(f"Elapsed Time: {end_time}")
+        logger.info(f"Elapsed Time: {end_time}")
         self.save_result_to_file(end_time, self.best_rnns[0][0])
 
 
@@ -669,7 +676,7 @@ class Colony:
                     self.space.inputs_space,
                     self.space.output_space,
                 ) = mpi_comm.recv(source=0)
-                self.logger.debug(f"Worker({rank}) recieved a msg")
+                self.logger.debug(f"Worker({rank}) recieved a msg(terminate:{stop})")
                 if stop:
                     break
                 if self.use_cants:
@@ -765,11 +772,11 @@ class Colony:
         if rank == 0:
             if colony.use_cants:
                 if colony.use_bp:
-                    self.logger.info("Main Process: COLONY({self.id}):: Starting 3D CANTS With-BP")
+                    logger.info("Main Process: COLONY({self.id}):: Starting 3D CANTS With-BP")
                 else:
-                    self.logger.info("Main Process: COLONY({self.id}):: Starting 4D CANTS BP-Free")
+                    logger.info("Main Process: COLONY({self.id}):: Starting 4D CANTS BP-Free")
             else:
-                self.logger.info("Main Process: COLONY({self.id}):: Starting ANTS")
+                logger.info("Main Process: COLONY({self.id}):: Starting ANTS")
 
                 """
                 Found that sending the massive structure
@@ -777,25 +784,24 @@ class Colony:
                 allowed number of recurrsive iterations: 1K
                 """
                 sys.setrecursionlimit(20000)
-                self.logger.info(f"Main Process: Using the total numbe of threads: {sys.getrecursionlimit()}")
+                logger.info(f"Main Process: Using the total numbe of threads: {sys.getrecursionlimit()}")
 
             start_time = time()
             main()
             end_time = time() - start_time
-            self.logger.info(f"Elapsed Time: {end_time}")
+            logger.info(f"Elapsed Time: {end_time}")
             self.save_result_to_file(end_time, self.best_rnns[0][0])
 
             """
             Train only the best rnn with BP
             (ONLY FOR BP-FREE CANTS)
-
+            """
             if colony.use_cants and not colony.use_bp:
                 colony.use_bp = True
-                colony.num_epochs = 250
+                colony.num_epochs = 1
                 evaluated_rnn = colony.evaluate_rnn(colony.best_rnns[0][1])
                 self.save_result_to_file(time()-start_time, evaluated_rnn.fitness)
                 self.save_rnn(evaluated_rnn, "-")
-            """
 
         else:
             worker()
