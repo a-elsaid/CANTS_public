@@ -12,3 +12,8 @@ OUT*
 *.res
 *.rnn
 *.swp
+*.sh
+extract_info.py
+./LOG
+./OUT
+./all_log
