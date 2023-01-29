@@ -18,4 +18,5 @@ all_log
 colonies_cants.py
 run_colonies_ants.sh
 run_colonies_cants.sh
+run_colonies_cants_bp.sh
 *.gitignore
