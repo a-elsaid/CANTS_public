@@ -27,13 +27,14 @@ from timeseries import Timeseries
 from helper import Args_Parser
 from datetime import datetime
 import pickle
+from time import time
 
 now = datetime.now()
 
 sys.path.insert(1, "/home/aaevse/loguru")
 
 warnings.filterwarnings("error")
-np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
+#np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
 
 
 class Colony:
@@ -679,11 +680,30 @@ class Colony:
                 self.logger.debug(f"Worker({rank}) recieved a msg(terminate:{stop})")
                 if stop:
                     break
+
+                start_create_nn_time_stamp = time()
                 if self.use_cants:
                     rnn = self.create_nn_cants()
                 else:
                     rnn = self.create_nn_ants()
+                create_nn_time = time() - start_create_nn_time_stamp
+
+                time_log_file = ""
+                if self.use_bp:
+                    time_log_file = f"cants_wzbp_time_id{rank}.log"
+                else:
+                    time_log_file = f"cants_wobp_time_id{rank}.log"
+                    
+                with open(time_log_file, 'a') as f:
+                    f.write(f"{create_nn_time}")
+
+                start_eval_nn_time_stamp = time()
                 rnn = self.evaluate_rnn(rnn)
+                eval_nn_time = time() - start_eval_nn_time_stamp
+                with open(time_log_file, 'a') as f:
+                    f.write(f",{eval_nn_time}" + "\n")
+
+
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()

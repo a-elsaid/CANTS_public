@@ -1,6 +1,5 @@
 .DS_Store
-log*
-OUT*
+**/OUT_SINGLE_CANTSBP
 *.pyc
 *.log
 *.nyp
@@ -23,3 +22,4 @@ run_colonies_ants.sh
 run_colonies_cants.sh
 run_colonies_cants_bp.sh
 *.gitignore
+*.rnn
