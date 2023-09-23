@@ -1,4 +1,7 @@
 .DS_Store
+log*
+OUT*
+*.pyc
 *.log
 *.nyp
 *.nn
