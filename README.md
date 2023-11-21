@@ -40,7 +40,7 @@ This package works on time-series (tabular) data. Data samples are provided in t
             - `WARNING`: for warning logs only or higher
             - `ERROR`: for error logs only or higher
         - `--log_file_name `: log file name. Each MPI worker process will have its own log file. The number of worker process will be attached at the end of the provided file name
-        - `--file_log_leve`: levle of logging saved in log files
+        - `--file_log_level`: level of logging saved in log files
         - `--num_ants`: number of ants used in the optimization
         - `--loss_fun`: used loss function [options: `mse`: mean squared error, `mae`: mean absolute error]
         - `--act_fun`: activation funtion used [options: `sigmoid`, `tanh`, `relu`]
@@ -48,3 +48,5 @@ This package works on time-series (tabular) data. Data samples are provided in t
 ## Requirements 
 - Required Python modules are listed in './src/requirements.txt'. They can be installed using 'pip install -r requirements.txt'
 - This implementation utilizes Message Passing Interface (MPI) for parallel processing. OpenMPI should be installed before using running the code. 
+
+[![Open in Code Ocean](https://codeocean.com/codeocean-assets/badge/open-in-code-ocean.svg)](https://codeocean.com/capsule/4569680/tree)
