@@ -1,4 +1,9 @@
 """
+from mpi4pi import MPI
+
+comm_mpi = MPI.COMM_WORLD
+comm_size - MPI.Get_size()
+rank = MPI.Get_rank()
 A colony controls:
  - the foraging of ants
  - the creation of RNN from the paths of the ants
@@ -27,13 +32,56 @@ from timeseries import Timeseries
 from helper import Args_Parser
 from datetime import datetime
 import pickle
+from time import time, sleep
+#import torch.multiprocessing as mp
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 now = datetime.now()
 
 sys.path.insert(1, "/home/aaevse/loguru")
 
 warnings.filterwarnings("error")
-np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
+#np.warnings.filterwarnings("error", category=np.VisibleDeprecationWarning)
+
+
+def thread_worker(
+                  rnn,
+                  data,
+                  use_bp,
+                  active_inference,
+                  num_epochs,
+    ):
+    """
+    training/testing RNN
+    """
+    # Perform some computation on the task using fixed_data
+    if use_bp:
+
+        if active_inference:
+            num_epochs = num_epochs
+        else:
+            num_epochs = num_epochs
+            
+        for k in range(1,num_epochs+1):
+            rnn.do_epoch(
+                inputs=data.train_input,
+                outputs=data.train_output,
+                do_feedbck=use_bp,
+                active_inference=active_inference,
+            )
+    else:
+        rnn.do_epoch(
+            inputs=data.train_input, 
+            outputs=data.train_output, 
+            do_feedbck=use_bp, 
+            active_inference=active_inference,
+        )
+
+    rnn.test_rnn(data.test_input, data.test_output)
+
+    return rnn.copy_rnn()
+    
+    
 
 
 class Colony:
@@ -484,16 +532,51 @@ class Colony:
         plt.cla()
         plt.clf()
 
-    def insert_rnn(self, rnn: RNN) -> None:
+    def active_inference(self, rnn: RNN, itrs: int = 20) -> (float, float):
+        # create a copy of the rnn with random gaussian weights
+        rnn.generate_bnn_version()
+
+        print(">>>> Starting Active Inference <<<<")
+        self.evaluate_rnn(rnn, active_inference=True)
+       
+
+        accumalted_err = []
+        for _ in range(itrs):
+            accumalted_err.append(rnn.test_rnn(self.data.test_input, self.data.test_output, active_inference=True))
+        
+        rnn.mean_bnn_fit            = np.mean(accumalted_err, axis=0)
+        rnn.uncertianity_prediction = np.std(accumalted_err, axis=0)
+
+        '''Average of RNN fitness, BNN Fitness, and (1- BNN Uncertainty)'''
+        rnn.score = np.mean([rnn.fitness, rnn.mean_bnn_fit, 1-rnn.uncertianity_prediction])
+
+        rnn.bnn_nodes.clear()
+        del(rnn.bnn_input_nodes)
+        del(rnn.bnn_output_nodes)
+
+        print("<<<< Finished Active Inference >>>>")
+        
+
+    def insert_rnn(self, rnn: RNN, active_inference=False) -> None:
         """
         inserts rnn to the population and sorts based on rnns fitnesses
         """
+
         inserted_rnn = False
-        if len(self.best_rnns) < self.best_population_size:
-            self.best_rnns.append([rnn.fitness, rnn])
+
+        if active_inference:
+            ''' Checking Uncertainity '''
+            self.active_inference(rnn)
         else:
-            if self.best_rnns[-1][0] > rnn.fitness:
-                self.best_rnns[-1] = [rnn.fitness, rnn]
+            rnn.score = rnn.fitness
+
+
+
+        if len(self.best_rnns) < self.best_population_size:
+            self.best_rnns.append([rnn.score, rnn])
+        else:
+            if self.best_rnns[-1][0] > rnn.score:
+                self.best_rnns[-1] = [rnn.score, rnn]
                 self.update_search_space_weights(rnn)
                 self.update_pheromone_const(rnn)
                 inserted_rnn = True
@@ -502,12 +585,12 @@ class Colony:
         self.best_rnns = sorted(self.best_rnns, key=lambda r: r[0])
         self.space.evaporate_pheromone()
         self.logger.info(
-            f"COLONY({self.id})::\t RNN Fitness: {rnn.fitness:.7f} " +
-            f"(Best RNN Fitness: {self.best_rnns[0][0]:.7f})"
+            f"COLONY({self.id})::\t RNN Score: {rnn.score:.7f} " +
+            f"(Best RNN Score: {self.best_rnns[0][0]:.7f})"
         )
         return inserted_rnn
 
-    def evaluate_rnn(self, rnn: RNN) -> None:
+    def evaluate_rnn(self, rnn: RNN, active_inference: bool = False) -> None:
         """
         training/testing RNN
         """
@@ -518,44 +601,52 @@ class Colony:
             self.logger.info(
                 f"\tCOLONY({self.id}):: Using BP, (number of Epochs: {self.num_epochs})"
             )
+
+            if active_inference:
+                num_epochs = self.num_epochs
+            else:
+                num_epochs = self.num_epochs
+                
             # for _ in tqdm(range(self.num_epochs), colour="green"):
-            for k in range(self.num_epochs):
-                logger.info(f"Evalutating RNN {k}/{self.num_epochs}")
+            for k in range(1,num_epochs+1):
+                logger.info(f"Evalutating RNN {k}/{num_epochs}")
                 rnn.do_epoch(
-                    self.data.train_input,
-                    self.data.train_output,
+                    inputs=self.data.train_input,
+                    outputs=self.data.train_output,
                     do_feedbck=self.use_bp,
+                    active_inference=active_inference,
                 )
         else:
             rnn.do_epoch(
-                self.data.train_input, self.data.train_output, do_feedbck=self.use_bp
+                inputs=self.data.train_input, 
+                outputs=self.data.train_output, 
+                do_feedbck=self.use_bp, 
+                active_inference=active_inference,
             )
         self.logger.info(f"COLONY({self.id}):: \t finished training")
-
         self.logger.info(f"COLONY({self.id}):: \t starting RNN evaluation")
+
         rnn.test_rnn(self.data.test_input, self.data.test_output)
         self.logger.info(f"COLONY({self.id}):: \t finished RNN evaluation... Testing Fitness: {rnn.fitness}")
-
         self.logger.info(f"COLONY({self.id}):: Finished RNN Colony Evaluation")
+
         return rnn
 
-    def thread_controller(self, total_marchs, num_threads: int):
-        from concurrent.futures import ThreadPoolExecutor
+    def thread_controller(
+                    self, 
+                    total_marchs, 
+                    num_threads: int, 
+                    colonies_executor=None
+        ):
+        import concurrent.futures 
 
         """
         function to control threads for BP CATNS and ANTS
         """
         if self.use_cants:
-            logger.info("COLONY({self.id}):: Starting 3D CANTS (with threading)")
+            logger.info(f"COLONY({self.id}):: Starting 3D CANTS (with threading)")
         else:
-            logger.info("COLONY({self.id}):: Starting ANTS (with threading)")
-
-        def thread_worker(rnn) -> None:
-            """
-            training/testing RNN
-            """
-            self.evaluate_rnn(rnn)
-            return rnn
+            logger.info(f"COLONY({self.id}):: Starting ANTS (with threading)")
 
         def prepare_rnn():
             if self.use_cants:
@@ -569,46 +660,86 @@ class Colony:
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()
-            self.insert_rnn(rnn)
+            inserted_rnn = self.insert_rnn(rnn)
+            if inserted_rnn:
+                end_time = time() - start_time
+                self.save_rnn(self.best_rnns[0][1], march_num)
 
         march = 0
+        sent_rnns = 0
         threads = []
+        rnns = {}
+        executor = concurrent.futures.ProcessPoolExecutor(max_workers=num_threads)
         for _ in range(min(total_marchs, num_threads)):
-            rnn = prepare_rnn()
             logger.info(f"THREAD {_}")
-            executor = ThreadPoolExecutor(max_workers=num_threads)
-            feature = executor.submit(thread_worker, rnn)
-            threads.append({"thread": executor, "feature": feature})
-
-        turn = True
-        while turn:
-            if march == total_marchs:
-                break
             rnn = prepare_rnn()
-            for t in threads:
-                if t["feature"].done():
-                    process_rnn(t["feature"].result())
-                    march += 1
+            rnns[rnn.id] = rnn
+            try:
+                thread = executor.submit( 
+                                    thread_worker,
+                                    rnn,
+                                    self.data,
+                                    self.use_bp,
+                                    False,
+                                    self.num_epochs,
+                        )
+                threads.append(thread)
+            except Exception as e:
+                print("Thread Error 1: ", e) 
+                sys.exit()
+
+        done, not_done = concurrent.futures.wait(
+                            threads, 
+                            timeout=None, 
+                            return_when=concurrent.futures.FIRST_COMPLETED
+                         )
+
+        while threads:
+            for thread in done:
+                march+=1
+                if march<=total_marchs:
                     logger.info(format(f"March No. {march}", "*^40"))
                     self.logger.info(
                         f"COLONY({self.id}): Interation {march}/{total_marchs}"
                     )
-                    if march == total_marchs:
-                        turn = False
-                        break
-                    threads.remove(t)
-                    rnn = prepare_rnn()
-                    executor = ThreadPoolExecutor(max_workers=1)
-                    executor.submit(thread_worker, rnn)
-                    threads.append({"thread": executor, "feature": feature})
-                    break
+                try:
+                    rnn_info = thread.result()
+                    threads.remove(thread)
+                except Exception as e:
+                    print("Thread Error 2: ", e) 
+                    sys.exit()
+                rnn = rnns[rnn_info[0]]
+                rnn.assign_rnn(rnn_info)
+                process_rnn(rnn) 
 
-    def save_result_to_file(self, stime: float, fitness: float):
+                if march<total_marchs:
+                    rnn = prepare_rnn()
+                    try:
+                        t = executor.submit(thread_worker, 
+                                            rnn,
+                                            self.data,
+                                            self.use_bp,
+                                            False,
+                                            self.num_epochs)
+                        threads.append(t)
+                    except Exception as e:
+                        print("Thread Error 3: ", e) 
+                        sys.exit()
+            done, not_done = concurrent.futures.wait(
+                        threads, 
+                        timeout=None, 
+                        return_when=concurrent.futures.FIRST_COMPLETED
+                         )
+        executor.shutdown()
+        """
+        """
+
+    def save_result_to_file(self, stime: float, best_rnn: RNN):
         time_stamp = now.strftime('%d_%m_%Y_%H_%M_%S')
         bp = ("bp" if self.use_bp else "wzbp")
         cants = ("CANTS" if self.use_cants else "ANTS")
-        with open("/".join([self.out_dir, f"nants{self.num_ants}_{bp}_{cants}.res"]), 'a') as fl:
-            fl.write("{}, {}, {}\n".format(time_stamp, stime, fitness))
+        with open("/".join([self.out_dir, f"COLONY{self.id}_nants{self.num_ants}_{bp}_{cants}.res"]), 'a') as fl:
+            fl.write("{}, {}, {}, {}\n".format(time_stamp, stime, best_rnn.fitness, best_rnn.score))
 
     def save_rnn(self, rnn: RNN, iteration = ""):
         bp = ("bp" if self.use_bp else "wzbp")
@@ -617,15 +748,15 @@ class Colony:
         with open("/".join([self.out_dir, f"{iteration}_{time_stamp}_nants{self.num_ants}_{bp}_{cants}.rnn"]), 'wb') as fl:
             pickle.dump(rnn, fl) 
 
-    def life(self, total_marchs) -> None:
+    def life(self, total_marchs, executor=None) -> None:
         """
         Do colony foraging
         """
         start_time = time()
         if self.num_threads != 0:
-            self.thread_controller(total_marchs, self.num_threads)
+            self.thread_controller(total_marchs, self.num_threads, executor=None)
         else:
-            logger.info("COLONY({self.id}):: Starting BP-free 4D CANTS")
+            logger.info(f"COLONY({self.id}):: Starting BP-free 4D CANTS")
             self.num_epochs = 1
             # for march_num in tqdm(range(total_marchs, colour="red")):
             for march_num in range(total_marchs):
@@ -641,31 +772,41 @@ class Colony:
                 if inserted_rnn:
                     end_time = time() - start_time
                     self.save_rnn(self.best_rnns[0][1], march_num)
-            #self.num_epochs = 1
 
         end_time = time() - start_time
-        logger.info(f"Elapsed Time: {end_time}")
-        self.save_result_to_file(end_time, self.best_rnns[0][0])
+        logger.info(f"Elapsed Time: {end_time/60:.2f} Mins")
+        self.save_result_to_file(end_time, self.best_rnns[0][1])
 
 
 
+        num_epochs_hold = self.num_epochs
         if self.use_cants:
-            colony.use_bp = True
-            colony.num_epochs = 1000
-            evaluated_rnn = colony.evaluate_rnn(colony.best_rnns[0][1])
-            self.save_result_to_file(time()-start_time, evaluated_rnn.fitness)
+            self.use_bp = True
+            self.num_epochs = 700
+            evaluated_rnn = self.evaluate_rnn(self.best_rnns[0][1])
+            self.save_result_to_file(time()-start_time, evaluated_rnn)
             self.save_rnn(evaluated_rnn, "-")
+        self.num_epochs = num_epochs_hold
             
 
-    def life_mpi(self, total_marchs) -> None:
+    def life_mpi(self, total_marchs, comm=None, worker_group=None, rank=None) -> None:
         """
         Do colony forging with mpi
         """
         from mpi4py import MPI
-
-        mpi_comm = MPI.COMM_WORLD
-        mpi_size = mpi_comm.Get_size()
-        rank = mpi_comm.Get_rank()
+        if len(worker_group)==0:
+            mpi_comm = MPI.COMM_WORLD
+            mpi_size = mpi_comm.Get_size()
+            rank = mpi_comm.Get_rank()
+            lead_rank = 0
+            worker_range = list(range(1, mpi_size))
+        else:
+            lead_rank = worker_group[0]
+            mpi_size = len(worker_group)
+            mpi_comm = comm
+            worker_range = worker_group[1:]
+        
+        print(f"Worker {rank} reporting from Colony {self.id}")
 
         def worker():
             while True:
@@ -675,15 +816,34 @@ class Colony:
                     self.space.all_points,
                     self.space.inputs_space,
                     self.space.output_space,
-                ) = mpi_comm.recv(source=0)
+                ) = mpi_comm.recv(source=lead_rank)
                 self.logger.debug(f"Worker({rank}) recieved a msg(terminate:{stop})")
                 if stop:
                     break
+
+                start_create_nn_time_stamp = time()
                 if self.use_cants:
                     rnn = self.create_nn_cants()
                 else:
                     rnn = self.create_nn_ants()
+                create_nn_time = time() - start_create_nn_time_stamp
+
+                time_log_file = ""
+                if self.use_bp:
+                    time_log_file = f"cants_wzbp_time_id{rank}.log"
+                else:
+                    time_log_file = f"cants_wobp_time_id{rank}.log"
+                    
+                with open(time_log_file, 'a') as f:
+                    f.write(f"{create_nn_time}")
+
+                start_eval_nn_time_stamp = time()
                 rnn = self.evaluate_rnn(rnn)
+                eval_nn_time = time() - start_eval_nn_time_stamp
+                with open(time_log_file, 'a') as f:
+                    f.write(f",{eval_nn_time}" + "\n")
+
+
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()
@@ -695,13 +855,13 @@ class Colony:
                         self.space.inputs_space,
                         self.space.output_space,
                     ],
-                    dest=0,
+                    dest=lead_rank,
                 )
                 self.logger.debug(f"Worker({rank}) sent a msg")
 
         def main():
             status = MPI.Status()
-            for worker in range(1, mpi_size):
+            for worker in worker_range:
                 self.logger.debug(f"Main sending to Worker: {worker}")
                 mpi_comm.send(
                     [
@@ -747,12 +907,12 @@ class Colony:
                 )
             '''
             for worker in tqdm(
-                range(1, mpi_size),
+                worker_range,
                 colour="red",
                 desc=f"Counting Last {mpi_size -1} Marchs...",
             ):
             '''
-            for worker in range(1, mpi_size):
+            for worker in worker_range:
                 self.logger.info(
                     f"Main Process: Colony({self.id}): Iteration {march_num+worker}/{total_marchs}"
                 )
@@ -769,12 +929,13 @@ class Colony:
                 
                 mpi_comm.send([True, None, None, None], dest=status.Get_source())
 
-        if rank == 0:
-            if colony.use_cants:
-                if colony.use_bp:
-                    logger.info("Main Process: COLONY({self.id}):: Starting 3D CANTS With-BP")
+        if rank == lead_rank:
+            print(f"===>Worker {rank} reporting as Lead in Colony {self.id}")
+            if self.use_cants:
+                if self.use_bp:
+                    logger.info(f"Main Process: COLONY({self.id}):: Starting 3D CANTS With-BP")
                 else:
-                    logger.info("Main Process: COLONY({self.id}):: Starting 4D CANTS BP-Free")
+                    logger.info(f"Main Process: COLONY({self.id}):: Starting 4D CANTS BP-Free")
             else:
                 logger.info("Main Process: COLONY({self.id}):: Starting ANTS")
 
@@ -790,20 +951,20 @@ class Colony:
             main()
             end_time = time() - start_time
             logger.info(f"Elapsed Time: {end_time}")
-            self.save_result_to_file(end_time, self.best_rnns[0][0])
+            self.save_result_to_file(end_time, self.best_rnns[0][1])
 
             """
             Train only the best rnn with BP
             (ONLY FOR BP-FREE CANTS)
             """
-            if colony.use_cants and not colony.use_bp:
-                colony.use_bp = True
-                colony.num_epochs = 1
-                evaluated_rnn = colony.evaluate_rnn(colony.best_rnns[0][1])
-                self.save_result_to_file(time()-start_time, evaluated_rnn.fitness)
+            if self.use_cants and not self.use_bp:
+                self.use_bp = True
+                self.num_epochs = 1
+                evaluated_rnn = self.evaluate_rnn(self.best_rnns[0][1])
+                self.save_result_to_file(time()-start_time, evaluated_rnn)
                 self.save_rnn(evaluated_rnn, "-")
 
-        else:
+        elif rank in worker_range:
             worker()
 
 

@@ -91,7 +91,7 @@ class Args_Parser:
         self.evaporation_rate = 0.9
         self.default_pheromone = 1.0
         self.dbscan_dist = 0.1
-        self.num_colonies = 20
+        self.num_colonies = 10
         self.communication_intervals = 50
         self.living_time = 1000
         self.dbscan_min_sample = 2
