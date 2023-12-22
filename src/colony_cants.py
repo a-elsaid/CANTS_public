@@ -124,7 +124,7 @@ class Colony:
         self.id = self.counter
         self.logger = logger.bind(col_id=self.id)
         self.logger.add(
-            f"{log_dir}/{self.log_file_name}_colony_{self.id}.log",
+            f"{log_dir}/{self.log_file_name}_colony_{self.id+1}.log",
             filter=lambda record: record["extra"].get("col_id") == self.id,
             level=self.col_log_level,
         )
@@ -806,7 +806,32 @@ class Colony:
             mpi_comm = comm
             worker_range = worker_group[1:]
         
-        print(f"Worker {rank} reporting from Colony {self.id}")
+        self.logger.info(f"Worker {rank} reporting from Colony {self.id}")
+
+        def worker_sub_process():
+                    
+            start_create_nn_time_stamp = time()
+            if self.use_cants:
+                rnn = self.create_nn_cants()
+            else:
+                rnn = self.create_nn_ants()
+            create_nn_time = time() - start_create_nn_time_stamp
+
+            time_log_file = ""
+            if self.use_bp:
+                time_log_file = f"cants_wzbp_time_worker{rank}.log"
+            else:
+                time_log_file = f"cants_wobp_time_worker{rank}.log"
+                
+            with open(time_log_file, 'a') as f:
+                f.write(f"{create_nn_time}")
+
+            start_eval_nn_time_stamp = time()
+            rnn = self.evaluate_rnn(rnn)
+            eval_nn_time = time() - start_eval_nn_time_stamp
+            with open(time_log_file, 'a') as f:
+                f.write(f",{eval_nn_time}" + "\n")
+            return rnn
 
         def worker():
             while True:
@@ -821,28 +846,16 @@ class Colony:
                 if stop:
                     break
 
-                start_create_nn_time_stamp = time()
-                if self.use_cants:
-                    rnn = self.create_nn_cants()
-                else:
-                    rnn = self.create_nn_ants()
-                create_nn_time = time() - start_create_nn_time_stamp
-
-                time_log_file = ""
-                if self.use_bp:
-                    time_log_file = f"cants_wzbp_time_id{rank}.log"
-                else:
-                    time_log_file = f"cants_wobp_time_id{rank}.log"
-                    
-                with open(time_log_file, 'a') as f:
-                    f.write(f"{create_nn_time}")
-
-                start_eval_nn_time_stamp = time()
-                rnn = self.evaluate_rnn(rnn)
-                eval_nn_time = time() - start_eval_nn_time_stamp
-                with open(time_log_file, 'a') as f:
-                    f.write(f",{eval_nn_time}" + "\n")
-
+                """ 
+                **TODO: THIS IS A HACK AND SHOULD GET RID OFF**
+                Some if the nodes don't fire in some of the generations
+                """
+                while True:
+                    try:
+                        rnn = worker_sub_process()
+                        break
+                    except Exception as e:
+                        print(f"COLONY({self.id}):: Worker({rank}):: NEEDS FIX:::  {e} || One/More Nodes Did Not Fire!!")
 
                 for ant in self.foragers:
                     ant.update_best_behaviors(rnn.fitness)
@@ -912,9 +925,9 @@ class Colony:
                 desc=f"Counting Last {mpi_size -1} Marchs...",
             ):
             '''
-            for worker in worker_range:
+            for w, worker in enumerate(worker_range):
                 self.logger.info(
-                    f"Main Process: Colony({self.id}): Iteration {march_num+worker}/{total_marchs}"
+                    f"Main Process: Colony({self.id}): Iteration {march_num+w+1}/{total_marchs}"
                 )
                 (
                     rnn,
@@ -930,7 +943,7 @@ class Colony:
                 mpi_comm.send([True, None, None, None], dest=status.Get_source())
 
         if rank == lead_rank:
-            print(f"===>Worker {rank} reporting as Lead in Colony {self.id}")
+            self.logger.info(f"+++> Worker {rank} reporting as Lead in Colony {self.id}")
             if self.use_cants:
                 if self.use_bp:
                     logger.info(f"Main Process: COLONY({self.id}):: Starting 3D CANTS With-BP")
@@ -950,7 +963,7 @@ class Colony:
             start_time = time()
             main()
             end_time = time() - start_time
-            logger.info(f"Elapsed Time: {end_time}")
+            logger.info(f"Colony({self.id}):: Elapsed Time for Finshing {total_marchs} Living Iterations: {end_time/60} mins")
             self.save_result_to_file(end_time, self.best_rnns[0][1])
 
             """
@@ -965,6 +978,7 @@ class Colony:
                 self.save_rnn(evaluated_rnn, "-")
 
         elif rank in worker_range:
+            self.logger.info(f"---> Worker {rank} reporting as Worker in Colony {self.id}")
             worker()
 
 
