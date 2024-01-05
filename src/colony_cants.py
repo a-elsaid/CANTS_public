@@ -864,9 +864,10 @@ class Colony:
         def worker():
             while True:
                 self.logger.debug(f"Worker({rank}) is waiting msg")
+                new_points = [p for p in self.space.all_points if p.new]
                 (
                     stop,
-                    self.space.all_points,
+                    new_points,
                     self.space.inputs_space,
                     self.space.output_space,
                 ) = mpi_comm.recv(source=lead_rank)
@@ -889,10 +890,11 @@ class Colony:
                     ant.update_best_behaviors(rnn.fitness)
                     ant.evolve_behavior()
                 self.logger.debug(f"Worker({rank}) sending a msg")
+                new_points = [p for p in self.space.all_points if p.new]
                 mpi_comm.send(
                     [
                         rnn,
-                        self.space.all_points,
+                        new_points,
                         self.space.inputs_space,
                         self.space.output_space,
                     ],
@@ -928,10 +930,11 @@ class Colony:
                 self.logger.debug("Main waiting for Worker Response")
                 (
                     rnn,
-                    self.space.all_points,
+                    new_points,
                     self.space.inputs_space,
                     self.space.output_space,
                 ) = mpi_comm.recv(status=status)
+                self.space.all_points.add_new_points(new_points)
                 self.logger.debug(f"Main Received from Worker: {status.Get_source()}")
                 inserted_rnn = self.insert_rnn(rnn)
                 if inserted_rnn:
@@ -959,10 +962,11 @@ class Colony:
                 )
                 (
                     rnn,
-                    self.space.all_points,
+                    new_points,
                     self.space.inputs_space,
                     self.space.output_space,
                 ) = mpi_comm.recv(status=status)
+                self.space.all_points.add_new_points(new_points)
                 inserted_rnn = self.insert_rnn(rnn)
                 if inserted_rnn:
                     end_time = time() - start_time
