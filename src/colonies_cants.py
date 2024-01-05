@@ -97,15 +97,21 @@ def living_colony():
             logger.trace(f"Worker({rank}:: Collecting Fitnees from Colony({colony.id})")
             best_fits = best_rnns[:, 0]
             avg_col_fit = sum(best_fits) / len(best_fits)
-            if avg_col_fit < fitness_global or fitness_global == -1:
-                best_position_global = colony.pso_best_position
-                fitness_global = avg_col_fit
+            if avg_col_fit < colony.avg_population_fit or colony.avg_population_fit == -1:
+                colony.avg_population_fit = avg_col_fit
+                colony.pso_best_position = colony.pso_position
 
-            logger.info(f"Lead Worker {rank} reporting its OverallFitness: {fitness_global} for Colony {colony.id} No. Ants ({colony.num_ants}) ER ({colony.evaporation_rate}) MR ({colony.mortality_rate})  ({tim}/{intervals})")
-            comm_mpi.send((tim, best_position_global, fitness_global), dest=0)
+            logger.info(f"Lead Worker {rank} reporting its OverallFitness: {fitness_global} " +
+                         f"for Colony {colony.id} " +
+                         f"No. Ants ({colony.num_ants}) " +
+                         f"ER ({colony.evaporation_rate}) " +
+                         f"MR ({colony.mortality_rate})  " +
+                         f"({tim}/{intervals})")
+            comm_mpi.send((tim, colony.pso_best_position, avg_col_fit), dest=0)
             best_position_global, fitness_global = comm_mpi.recv(source=0)
             colony.update_velocity(best_position_global)
             colony.update_position()
+            print(f"=====+++++>>> Colony({colony.id}) Best Global Pos: {best_position_global})  Best Col Pos: {colony.pso_best_position} No Ants: {colony.num_ants} ER: {colony.evaporation_rate}  MR: {colony.mortality_rate}")
 
     if rank==workers[0]:
         comm_mpi.send(None, dest=0)
@@ -129,8 +135,8 @@ def main():
         for c in range(args.num_colonies):
             msg = comm_mpi.recv(source=worker_group[c][0])
             if msg:
-                tim, best_position_global, fitness_global = msg
-                BEST_POS_GOL[c] = best_position_global
+                tim, best_position, fitness_global = msg
+                BEST_POS_GOL[c] = best_position
                 FIT_GOL[c] = fitness_global
             else:
                 done_workers+=1

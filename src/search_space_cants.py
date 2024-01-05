@@ -60,6 +60,10 @@ class RNNSearchSpaceCANTS:
                 self.all_points = new_all_points
                 self.evaporated_points = 0
             '''
+    def add_new_points(self, new_points):
+        for p in new_points:
+            self.all_points[p.id] = p
+            p.new = False
 
     class Point:
         counter = 0
@@ -83,6 +87,7 @@ class RNNSearchSpaceCANTS:
             self.type = NODE_TYPE["HIDDEN"]
             self.name = name
             self.inout_num = inout_num
+            self.new = True
             if self.name is not None:
                 self.type = point_type
             RNNSearchSpaceCANTS.Point.counter += 1

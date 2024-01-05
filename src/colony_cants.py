@@ -148,6 +148,7 @@ class Colony:
         self.loss_fun = loss_fun
         self.act_fun = act_fun
         self.space = search_space
+        self.avg_population_fit = -1
         if not self.space:
             if self.use_cants:
                 self.space = RNNSearchSpaceCANTS(
@@ -193,8 +194,8 @@ class Colony:
         self.logger.info(f"COLONY({self.id}):: Updating Colony PSO velocity")
 
         w = 0.5  # constant inertia weight (how much to weigh the previous velocity)
-        c1 = 1  # cognative constant
-        c2 = 2  # social constant
+        c1 = 1.7  # cognative constant
+        c2 = 1.7  # social constant
 
         for i, pos in enumerate(self.pso_position):
             r1 = np.random.random()
@@ -206,6 +207,32 @@ class Colony:
     def update_position(self):
         """update the particle position based off new velocity updates"""
         self.logger.info(f"COLONY({self.id}):: Updating Colony PSO position")
+        
+        self.num_ants+= self.pso_velocity[0]
+        self.num_ants = int(self.num_ants)
+        self.mortality_rate+= self.pso_velocity[1]
+        self.evaporation_rate+= self.pso_velocity[2]
+
+        if self.num_ants < self.pso_bounds[0][0] or self.num_ants > self.pso_bounds[0][1]:
+            self.num_ants = np.random.randint(
+                low=self.pso_bounds[0][0], high=self.pso_bounds[0][1]
+            )
+            
+        if self.mortality_rate < self.pso_bounds[1][0] or self.mortality_rate > self.pso_bounds[1][1]:
+            self.mortality_rate = np.random.uniform(
+                low=self.pso_bounds[1][0], high=self.pso_bounds[1][1]
+            )
+            
+        if self.evaporation_rate < self.pso_bounds[2][0] or self.evaporation_rate > self.pso_bounds[2][1]:
+            self.evaporation_rate = np.random.uniform(
+                low=self.pso_bounds[2][0], high=self.pso_bounds[2][1]
+            )
+            
+        self.pso_position[0] = self.num_ants
+        self.pso_position[1] = self.mortality_rate
+        self.pso_position[2] = self.evaporation_rate
+
+        '''
         for i, pos in enumerate(self.pso_position):
             self.pso_position[i] = pos + self.pso_velocity[i]
 
@@ -219,8 +246,9 @@ class Colony:
                     self.pso_position[i] = np.random.uniform(
                         low=self.pso_bounds[i][0], high=self.pso_bounds[i][1]
                     )
+        '''
 
-            self.space.evaporation_rate = self.evaporation_rate
+        self.space.evaporation_rate = self.evaporation_rate
 
     def forage(
         self,
